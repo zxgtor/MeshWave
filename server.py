@@ -14,6 +14,7 @@ from brush_support import prepare_brush
 from curves import generate_curve_pairs
 from mesh_health import diagnose_mesh, repair_mesh
 from optical_flow import refine_texture
+from fit_quality import inspect_fit
 from batch_jobs import BatchManager, BatchBusy, constraints_manifest
 
 ROOT = Path(__file__).parent
@@ -60,7 +61,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self.reply(200, mesh_data(body['text']))
             elif self.path == '/api/texture':
                 self.reply(200, normalize_texture(body))
-            elif self.path in ('/api/wrap', '/api/bake', '/api/landmarks', '/api/flow-refine'):
+            elif self.path in ('/api/wrap', '/api/bake', '/api/landmarks', '/api/flow-refine', '/api/fit-quality'):
                 if not SOLVER.acquire(blocking=False):
                     self.reply(409, {'error': '正在计算，请稍后重试。'})
                     return
@@ -74,6 +75,8 @@ class Handler(SimpleHTTPRequestHandler):
                             body.get('normalAngle', 60), body.get('excludedFaces'))
                     elif self.path == '/api/landmarks':
                         result = generate_pairs(body)
+                    elif self.path == '/api/fit-quality':
+                        result = inspect_fit(body)
                     else:
                         result = refine_texture(body)
                     self.reply(200, result)

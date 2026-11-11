@@ -1,5 +1,7 @@
 export default `
 扫描尺寸无效，无法检测异常。	Invalid scan dimensions for anomaly detection.
+质量检查的结果顶点无效或模板过大。	Invalid result vertices or template too large for quality inspection.
+质量检查的表面距离无效。	Invalid surface distances in quality inspection.
 待检测的贴合顶点无效。	Invalid fitted vertices for detection.
 扫描尺寸无效，无法检测贴合质量。	Invalid scan dimensions for fit quality checks.
 异常检测邻帧顶点无效。	Invalid neighboring frame vertices for anomaly detection.

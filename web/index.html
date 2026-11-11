@@ -48,7 +48,20 @@
 <button id="run" class="primary" disabled>开始非刚性贴合</button>
 <button id="export" disabled>导出贴合结果 · OBJ</button>
 <button id="reset" class="quiet" disabled>恢复原始模板</button>
-<p class="hint">保留顶点顺序、面和 UV。需要配套贴图时，请使用下方“导出纹理模型 · ZIP”。</p></section>
+<p class="hint">保留顶点顺序、面和 UV。需要配套贴图时，请使用下方“导出纹理模型 · ZIP”。</p>
+<h3 class="quality-heading">贴合质量检查</h3>
+<button id="quality-compute" disabled>计算／刷新误差</button>
+<label class="hint quality-toggle"><input id="show-quality" type="checkbox" disabled> 显示贴合误差热图</label>
+<div class="settings"><label for="quality-threshold">误差阈值 %</label><input id="quality-threshold" type="number" min="0.001" max="10" step="0.01" value="0.2" disabled></div>
+<label class="hint quality-toggle"><input id="quality-normals" type="checkbox" disabled> 标出法线异常（紫色）</label>
+<p class="hint">距离单位沿用 OBJ；百分比按目标包围盒对角线计，不假定毫米。统计单向最近三角面距离，不按法线过滤；法线异常单独计数。灰色排除区及未使用顶点不计入统计，对应点保留。</p>
+<p id="quality-info" class="hint" role="status">完成贴合后，计算误差并检查局部区域。</p>
+<p id="quality-global" class="hint quality-summary" hidden></p>
+<label class="hint quality-toggle"><input id="quality-local" type="checkbox" disabled> 局部检查 · Shift 点击左侧</label>
+<div class="settings"><label for="quality-radius">局部半径 %</label><input id="quality-radius" type="number" min="0.1" max="20" step="0.1" value="5" disabled></div>
+<div class="point-tools"><button id="quality-worst" disabled>定位最大误差</button><button id="quality-clear-local" disabled>清除局部选择</button></div>
+<p id="quality-local-summary" class="hint quality-summary" hidden></p>
+<p class="hint">开启局部检查后，Shift 点击眼周、嘴唇等位置；沿网格边距离选取邻域，邻域外变暗。检查只读，不改点对、模型或撤销历史。几何变化后需重新计算；距离小不代表解剖对应正确，也不检测自相交。</p></section>
 <section><div class="section-title"><span>05</span><h2>笔刷修正</h2></div>
 <div class="settings"><label for="brush-tool">操作</label><select id="brush-tool" disabled><option value="navigate">浏览模型</option><option value="pull">外推 · 沿法线</option><option value="push">内压 · 反法线</option><option value="smooth">局部平滑</option><option value="project">表面投射</option><option value="smooth-project">贴面平滑</option><option value="weight-paint">绘制影响权重</option><option value="weight-smooth">平滑权重</option></select><label for="brush-radius">半径 %</label><input id="brush-radius" type="number" min="0.2" max="20" step="0.2" value="5"><label for="brush-strength">强度</label><input id="brush-strength" type="number" min="1" max="100" value="30"></div>
 <div class="settings"><label for="weight-target">绘制值 %</label><input id="weight-target" type="number" min="0" max="100" value="0"></div><label class="hint"><input id="show-weights" type="checkbox"> 显示影响权重</label><p class="hint">蓝色 0% 保护 → 金色 100% 完全影响；红色为硬锁定。绘制值决定目标权重，沿用上方半径和强度；权重影响手动笔刷和纹理细化。</p><div class="point-tools"><button id="weight-protect-all" disabled>全部保护</button><button id="weight-edit-all" disabled>全部可编辑</button></div><div class="point-tools"><button id="brush-undo" disabled>撤销笔刷</button><button id="brush-redo" disabled>重做笔刷</button></div>
@@ -110,7 +123,7 @@
 <p class="hint">每批最多 50 项，单 OBJ ≤ 18 MB，单贴图 ≤ 8 MB / 16 百万像素，上传及未压缩输出各 ≤ 256 MB。按文件名数字顺序求解；勾选烘焙后导出各项 OBJ、MTL、PNG 和报告。建议启动前保存工程；关闭页面后后台继续，本地服务停止则中断。</p></section></aside>
 <div class="workspace">
 <div class="toolbar"><div><strong id="phase">准备模型</strong><span id="instruction">导入两个模型，或载入演示体验完整流程</span></div><div class="view-tools"><label><input id="show-textures" type="checkbox" checked> 纹理</label><label><input id="unlit-textures" type="checkbox" checked> 原色</label><label><input id="wire" type="checkbox"> 线框</label><label><input id="overlay" type="checkbox" disabled> 叠加目标</label><button id="fit">视图复位</button></div></div>
-<div class="viewports"><section class="viewport" id="source-view"><div class="view-label"><span class="source-dot">●</span> 模板 <span id="result-badge" hidden>贴合结果</span></div><div class="placeholder">导入模板模型<small>顶点与拓扑将保留</small></div></section><section class="viewport" id="target-view"><div class="view-label"><span class="target-dot">●</span> 目标</div><div class="placeholder">导入目标模型<small>选择与模板相同的部位</small></div></section></div>
+<div class="viewports"><section class="viewport" id="source-view"><div class="view-label"><span class="source-dot">●</span> 模板 <span id="result-badge" hidden>贴合结果</span></div><div id="quality-legend" class="quality-legend" hidden><span id="quality-legend-label"></span><div class="quality-gradient"></div><span id="quality-legend-note"></span></div><div class="placeholder">导入模板模型<small>顶点与拓扑将保留</small></div></section><section class="viewport" id="target-view"><div class="view-label"><span class="target-dot">●</span> 目标</div><div class="placeholder">导入目标模型<small>选择与模板相同的部位</small></div></section></div>
 <div id="metrics" hidden></div>
 <div id="stage-results" hidden></div>
 <footer><span id="status" role="status" aria-live="polite">就绪</span><span>拖动旋转 · 滚轮缩放 · 右键平移 · Shift + 点击执行所选操作</span></footer>

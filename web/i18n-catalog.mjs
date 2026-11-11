@@ -3,6 +3,40 @@ export default `
 Mesh Wave · 网格贴合工作台	Mesh Wave · Mesh Fitting Workbench
 网格贴合工作台	Mesh Fitting Workbench
 界面语言	Interface Language
+贴合质量检查	Fit Quality Inspection
+计算／刷新误差	Compute / Refresh Errors
+显示贴合误差热图	Show Fit Error Heatmap
+误差阈值 %	Error Threshold %
+标出法线异常（紫色）	Highlight Normal Issues (Purple)
+距离单位沿用 OBJ；百分比按目标包围盒对角线计，不假定毫米。统计单向最近三角面距离，不按法线过滤；法线异常单独计数。灰色排除区及未使用顶点不计入统计，对应点保留。	Distances use OBJ units; percentages use the target bounding-box diagonal, not assumed millimeters. Measures one-way nearest-triangle distance without normal filtering; normal issues are counted separately. Gray excluded or unused vertices are omitted; correspondences remain visible.
+完成贴合后，计算误差并检查局部区域。	After fitting, compute errors and inspect local regions.
+局部检查 · Shift 点击左侧	Local Inspection · Shift-click Left Mesh
+局部半径 %	Local Radius %
+定位最大误差	Locate Maximum Error
+清除局部选择	Clear Local Selection
+开启局部检查后，Shift 点击眼周、嘴唇等位置；沿网格边距离选取邻域，邻域外变暗。检查只读，不改点对、模型或撤销历史。几何变化后需重新计算；距离小不代表解剖对应正确，也不检测自相交。	Enable local inspection, then Shift-click an eye, lip, or other region. Neighbors are selected by mesh-edge distance; other vertices are dimmed. Inspection is read-only and preserves pairs, meshes, and undo history. Recompute after geometry edits. Small distances do not prove anatomical correspondence; self-intersections are not detected.
+质量检查参数超出范围。	Quality inspection settings are out of range.
+几何已变化，请重新计算质量检查。	Geometry changed. Recompute quality inspection.
+正在计算完整表面误差…	Computing full surface errors…
+检查完成 · 跳过	Inspection complete · Skipped
+个模板顶点 · 排除	template vertices · Excluded
+个目标面 · 忽略	target faces · Ignored
+个退化目标面	degenerate target faces
+没有可统计的顶点。	No eligible vertices to summarize.
+个顶点 · 超阈值	vertices · Above threshold
+平均	Mean
+中位数	Median
+· P95	· P95
+· 最大	· Maximum
+法线异常	Normal issues
+· 法线未知	· Unknown normals
+全局质量	Global Quality
+局部质量 · 中心顶点 #	Local Quality · Center Vertex #
+表面半径	Surface Radius
+表面误差 ·	Surface Error ·
+灰色不计入统计 · 紫色法线异常	Gray: omitted · Purple: normal issues
+灰色不计入统计 · 红色达到阈值	Gray: omitted · Red: at or above threshold
+此处为排除区或未使用顶点，不参与统计。	This vertex is excluded or unused and is omitted from statistics.
 未保存	Unsaved
 打开工程	Open Project
 保存工程	Save Project

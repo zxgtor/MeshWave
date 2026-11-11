@@ -11,6 +11,7 @@
 | 功能 | 说明 |
 | --- | --- |
 | 网格贴合 | 单阶段或从粗到细多阶段求解，精确三角面距离、法线过滤与局部防翻面保护 |
+| 贴合质量检查 | 误差热图、可调阈值、全局／局部平均值、RMS、P95、最大误差和法线异常统计 |
 | 对应点与曲线 | 手动选择、重选和删除点对；正面人脸特征点辅助检测；成对曲线生成对应点 |
 | 区域保护 | 模板固定区域、目标排除区域、软遮罩与顶点权重绘制 |
 | 笔刷修正 | 外推、内压、平滑、表面投射和贴面平滑，支持笔刷撤销与重做 |
@@ -153,6 +154,8 @@ python3 -m venv .venv
 
 普通视图：左键拖动旋转，滚轮缩放，右键平移。笔刷模式中用 **Alt + 左键**旋转；详细快捷键与约束规则见 [使用指南](docs/user-guide.md)。
 
+贴合后，在第 04 节点击**计算／刷新误差**显示热图。开启**局部检查**，Shift 点击左侧眼周、嘴唇等位置，或点击**定位最大误差**查看邻域统计。蓝→黄→红表示距离增大，红色达到所设阈值；可单独以紫色标出法线异常。距离使用 OBJ 原单位，阈值和半径按目标尺寸百分比设置。检查不修改工程或撤销历史，几何变化后需重新计算；表面距离小不代表解剖对应正确，也不检查自相交。
+
 ## 输入与输出
 
 | 类型 | 支持范围 |
@@ -197,7 +200,7 @@ npm run vendor
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-node --test tests/brush.test.mjs tests/i18n.test.mjs
+node --test tests/brush.test.mjs tests/i18n.test.mjs tests/fit-quality.test.mjs
 ```
 
 Three.js 的 MIT 许可见 [THREE-LICENSE.txt](web/vendor/THREE-LICENSE.txt)。人脸模型来源见 [模型说明](models/README.md)。

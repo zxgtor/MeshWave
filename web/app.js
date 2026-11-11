@@ -6,6 +6,7 @@ import { BrushMesh, StrokeHistory } from './brush.mjs';
 import { TargetSurface } from './target-surface.mjs';
 import { MeshReview } from './mesh-review.mjs';
 import { BatchUI } from './batch-ui.mjs';
+import { QualityUI } from './quality-ui.mjs';
 
 initializeLanguage();
 const $ = id => document.getElementById(id);
@@ -15,7 +16,7 @@ const state = { source: null, target: null, pairs: [], pending: null, result: nu
 const views = {};
 const brush={context:null,surface:null,history:new StrokeHistory(),stroke:null,pointer:null,lastTime:0,cursor:null};
 const health={viewer:null,text:null,name:'',side:'source',report:null,repair:null,after:false,fromCurrent:false,undo:null};
-let batchUI=null;
+let batchUI=null,qualityUI=null;
 function status(text, error = false) { setText($('status'),text); $('status').classList.toggle('error', error); }
 function changed() {discardFlowPreview();state.dirty=true;health.undo=null;state.curvePairs=currentCurvePairs();state.curveSuggestion=null;if(state.autoSuggestion){state.autoSuggestion=null;state.autoMessage='编辑状态已变化，旧检测建议已清除。';}}
 function download(text, name, type='application/json') {
@@ -61,10 +62,11 @@ function setupView(side, color) {
     const rect=renderer.domElement.getBoundingClientRect();
     const ray=new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1),camera);
     const hit=ray.intersectObject(v.mesh)[0]; if(!hit) return;
-    if(!['points','curves'].includes($('tool').value)){selectRegion(side,hit.faceIndex);return;}
+    if(!['points','curves'].includes($('tool').value)&&!(side==='source'&&qualityUI?.inspecting)){selectRegion(side,hit.faceIndex);return;}
     const vertices=side==='source'&&state.result?state.result.vertices:state[side].vertices;
     const candidates=state[side].faces[hit.faceIndex];
     const id=candidates.reduce((a,b)=>new THREE.Vector3().fromArray(vertices[a]).distanceToSquared(hit.point)<new THREE.Vector3().fromArray(vertices[b]).distanceToSquared(hit.point)?a:b);
+    if(side==='source'&&qualityUI?.inspecting){qualityUI.select(id);return;}
     if($('tool').value==='curves')pickCurve(side,id);else pick(side,id);
   });
   renderer.domElement.addEventListener('pointercancel',()=>{controls.enabled=true;down=null;});
@@ -74,17 +76,22 @@ function setupView(side, color) {
 function disposeMesh(mesh) { if(!mesh) return; mesh.removeFromParent();mesh.geometry.dispose();mesh.material.map?.dispose();mesh.material.dispose(); }
 function setMesh(side, vertices) {
   if(side==='source'&&state.flowSuggestion)vertices=state.flowSuggestion.vertices;
-  const v=views[side], data=state[side]; disposeMesh(v.mesh);
+  const v=views[side], data=state[side];
+  qualityUI?.sync(side,vertices||data.vertices);
+  if(side==='source'&&$('show-weights').checked)qualityUI?.hide();
+  const qualityDisplay=side==='source'&&qualityUI?.enabled&&!state.flowSuggestion;
+  disposeMesh(v.mesh);
   const textureData=side==='source'&&state.result?.texture&&!state.flowSuggestion?state.result.texture:data.texture;
   let map=null;
   const weightDisplay=side==='source'&&$('show-weights').checked&&state.brushWeights&&!state.flowSuggestion;
-  if(!weightDisplay&&$('show-textures').checked&&data.hasUV&&textureData){map=new THREE.TextureLoader().load(textureData.dataUrl);map.colorSpace=THREE.SRGBColorSpace;map.wrapS=map.wrapT=THREE.RepeatWrapping;map.magFilter=THREE.LinearFilter;map.generateMipmaps=false;map.minFilter=THREE.LinearFilter;}
-  const options={color:map||weightDisplay?0xffffff:v.color,map,side:THREE.DoubleSide,wireframe:$('wire').checked,transparent:Boolean(map),alphaTest:map ? .001 : 0};
-  const material=map&&$('unlit-textures').checked?new THREE.MeshBasicMaterial(options):new THREE.MeshStandardMaterial({...options,roughness:.72,metalness:map?0:.08});
+  if(!qualityDisplay&&!weightDisplay&&$('show-textures').checked&&data.hasUV&&textureData){map=new THREE.TextureLoader().load(textureData.dataUrl);map.colorSpace=THREE.SRGBColorSpace;map.wrapS=map.wrapT=THREE.RepeatWrapping;map.magFilter=THREE.LinearFilter;map.generateMipmaps=false;map.minFilter=THREE.LinearFilter;}
+  const options={color:map||weightDisplay||qualityDisplay?0xffffff:v.color,map,side:THREE.DoubleSide,wireframe:$('wire').checked,transparent:Boolean(map),alphaTest:map ? .001 : 0};
+  const material=qualityDisplay||map&&$('unlit-textures').checked?new THREE.MeshBasicMaterial(options):new THREE.MeshStandardMaterial({...options,roughness:.72,metalness:map?0:.08});
   v.mesh=new THREE.Mesh(geometry(vertices || data.vertices,data.faces,data.uvs,data.uvFaces),material);
   v.group.add(v.mesh); v.el.querySelector('.placeholder').hidden=true;
   refreshExclusions(side);
   if(weightDisplay)updateWeightColors();
+  if(qualityDisplay)qualityUI.apply(v.mesh);
 }
 function updateWeightColors(ids=null){
   const mesh=views.source?.mesh;if(!mesh||!state.brushWeights||!$('show-weights').checked||state.flowSuggestion)return;
@@ -104,7 +111,7 @@ function blockedVertices(side) {
 }
 function refreshExclusions(side) {
   const v=views[side];disposeMesh(v.exclusions);v.exclusions=null;
-  if(!state[side]||!state.excludedFaces[side].size)return;
+  if(!state[side]||!state.excludedFaces[side].size||side==='source'&&qualityUI?.enabled)return;
   const vertices=side==='source'&&state.result?state.result.vertices:state[side].vertices;
   const faces=[...state.excludedFaces[side]].map(i=>state[side].faces[i]);
   const mesh=new THREE.Mesh(geometry(vertices,faces),new THREE.MeshBasicMaterial({color:0xf0655b,transparent:true,opacity:.75,side:THREE.DoubleSide,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
@@ -144,6 +151,7 @@ function fit(side) {
   v.camera.near=r/1000;v.camera.far=distance+r*100;v.camera.updateProjectionMatrix();v.controls.update();
 }
 function clearResult() {
+  qualityUI?.clear();
   discardFlowPreview();
   setText($('flow-info'),'完成几何贴合并加载两侧贴图后，可进行纹理细化。');
   resetBrush();
@@ -215,6 +223,7 @@ function update() {
   updateCurveControls();renderCurves();
   updateFlowControls();
   batchUI?.update(state.busy);
+  qualityUI?.update();
   if(batchUI?.active){setText($('phase'),'批处理进行中');setText($('instruction'),'使用固定模板与参数依次求解；当前工作区保留，进度见批处理列表。');}
   if(state.source&&state.brushWeights&&$('show-weights').checked)updateWeightColors();
 }
@@ -401,7 +410,7 @@ $('export').onclick=async()=>{
   try{const data=await api('export',{source:state.source.text,vertices:state.result.vertices});download(data.text,state.source.name.replace(/\.obj$/i,'')+'_wrapped.obj','text/plain');status('已导出 OBJ，保留原始面和 UV。');}catch(error){status(error.message,true);}finally{state.busy=false;update();}
 };
 function serializedExclusions(){return {source:[...state.excludedFaces.source],target:[...state.excludedFaces.target]};}
-function brushActive(){return Boolean(state.result&&brush.context&&!state.flowSuggestion&&$('brush-tool').value!=='navigate');}
+function brushActive(){return Boolean(state.result&&brush.context&&!state.flowSuggestion&&!qualityUI?.inspecting&&$('brush-tool').value!=='navigate');}
 function weightTool(){return ['weight-paint','weight-smooth'].includes($('brush-tool').value);}
 function brushSettings(){const radiusPercent=Number($('brush-radius').value),strength=Number($('brush-strength').value);if(!Number.isFinite(radiusPercent)||radiusPercent<.2||radiusPercent>20||!Number.isFinite(strength)||strength<1||strength>100)throw Error('笔刷半径为 0.2%–20%，强度为 1–100。');return {radiusPercent,strength};}
 function resetBrush(){
@@ -450,6 +459,7 @@ function syncBrushGeometry(change){
   for(const id of change.normals){const n=context.normal(id);if(g.index)normal.setXYZ(id,...n);else for(const corner of context.corners[id])normal.setXYZ(corner,...n);}
   position.needsUpdate=true;normal.needsUpdate=true;
   if(g.boundingSphere)g.boundingSphere.radius+=change.maxMovement||0;
+  qualityUI?.clear(true,true);
 }
 function invalidateBrushOutputs(){
   if(state.result.textureRefined||state.result.flowStats)setText($('flow-info'),'几何已手动修改，先前纹理细化统计已失效。');
@@ -513,6 +523,7 @@ function processBrushFrame(time){
   }catch(error){if(brush.stroke)finishBrush(true);status(error.message,true);}
 }
 $('brush-tool').onchange=async()=>{
+  if($('brush-tool').value!=='navigate')$('quality-local').checked=false;
   brush.pointer=null;if(brush.cursor)brush.cursor.hidden=true;
   if($('brush-tool').value==='navigate'){update();return;}
   if(!state.result){$('brush-tool').value='navigate';return;}
@@ -770,6 +781,13 @@ $('demo').onclick=async()=>{
   try{const a=demoMesh(),b=demoMesh(true);await load('source',a.text,'demo_template.obj');await load('target',b.text,'demo_target.obj');state.target.texture=await api('texture',demoTexture());setMesh('target');state.pairs=a.ids.map(i=>[i,i]);status('演示已载入，包含 UV、扫描棋盘贴图和 7 对点；贴合后可烘焙纹理。');}catch(error){status(error.message,true);}finally{state.busy=false;update();}
 };
 try{views.source=setupView('source',0xa8afb9);views.target=setupView('target',0x7d8796);
+  qualityUI=new QualityUI({api,
+    readiness:()=>({source:state.source,target:state.target,result:state.result,busy:state.busy,preview:Boolean(state.flowSuggestion),exclusions:serializedExclusions(),normalAngle:Number($('normal-angle').value)}),
+    setBusy:value=>{state.busy=value;update();},
+    paint:()=>{if(state.source)setMesh('source',state.result?.vertices);},
+    enterInspection:()=>{$('brush-tool').value='navigate';brush.pointer=null;if(brush.cursor)brush.cursor.hidden=true;},
+    focus:id=>{const view=views.source,point=new THREE.Vector3().fromArray(state.result.vertices[id]),offset=point.clone().sub(view.controls.target);view.camera.position.add(offset);view.controls.target.copy(point);view.controls.update();}
+  });
   batchUI=new BatchUI({api,download,
     readiness:()=>({busy:state.busy,source:Boolean(state.source),target:Boolean(state.target),result:Boolean(state.result),flowReady:Boolean(state.source?.hasUV&&state.source?.texture),paired:state.pairs.length>=3,blocked:Boolean(state.flowSuggestion||state.autoSuggestion||state.curveSuggestion||state.pending!==null||state.edit!==null)}),
     setBusy:value=>{if(state.busy!==value){state.busy=value;update();}},
