@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {messages,translate,preserveName,setText,appendText} from '../web/i18n.mjs';
+import {messages,translate,preserveName,setText,clearText,getSourceText,appendText} from '../web/i18n.mjs';
+
+test('replacing a saved-result message with statistics clears its translation binding',()=>{
+  const node={textContent:'',replaceChildren(){this.textContent='';}};
+  setText(node,'已恢复保存的结果');clearText(node);node.textContent='局部保护顶点数　793';
+  assert.equal(getSourceText(node),'局部保护顶点数　793');
+});
 
 test('formats dynamic statistics and server errors in English',()=>{
   assert.equal(translate('有效 UV 像素覆盖率 100.0% · 0 像素未匹配 · 0 个零面积 UV 面','en'),

@@ -1,4 +1,5 @@
 export default `
+局部保护顶点数　	Locally protected vertices　
 编辑状态已变化，旧检测建议已清除。	Edits changed; previous detection suggestions were cleared.
 请求失败	Request failed
 请先恢复原始模板，再修改排除区域。	Restore the original template before editing exclusions.

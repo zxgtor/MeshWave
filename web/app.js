@@ -1,4 +1,4 @@
-import {setText,appendText,setLabel,translate,getSourceText,preserveName,initializeLanguage} from './i18n.mjs';
+import {setText,clearText,appendText,setLabel,translate,getSourceText,preserveName,initializeLanguage} from './i18n.mjs';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
@@ -408,8 +408,9 @@ $('run').onclick=async()=>{
   try{
     state.result=await api('wrap',{source:state.source.text,target:state.target.text,pairs:state.pairs,iterations:Number($('iterations').value),smoothness:Number($('smoothness').value),normalAngle:Number($('normal-angle').value),solverMode:$('solver-mode').value,brushWeights:state.brushWeights?Array.from(state.brushWeights):null,excludedFaces:serializedExclusions()});changed();
     setMesh('source',state.result.vertices);fit('source');$('result-badge').hidden=false;
-    const s=state.result.stats;const metrics=$('metrics');metrics.hidden=false;metrics.replaceChildren();
+    const s=state.result.stats;const metrics=$('metrics');metrics.hidden=false;clearText(metrics);
     for(const text of [`平均三角面距离　${s.initialMeanDistance.toPrecision(4)} → ${s.finalMeanDistance.toPrecision(4)}`,`对应点最大误差　${s.landmarkMaxError.toExponential(2)}`,`法线过滤 ${s.normalFilteredNearestVertices} 个最近匹配 · 防翻面限步 ${s.flipLimitedSteps} 次`,`${s.iterations}/${s.requestedIterations} 次迭代 · 顶点数与拓扑保留`]){const el=document.createElement('strong');setText(el,text);metrics.append(el);}
+    if(s.localGuardVertices){const el=document.createElement('strong');setText(el,`局部保护顶点数　${s.localGuardVertices}`);metrics.append(el);}
     showStages(s);
     status(s.stoppedByFlipGuard?'防翻面保护已提前停止迭代，保留最后安全结果；请检查对应点和局部形变。':'贴合完成。请旋转视图、叠加目标检查结果。');
   }catch(error){status(error.message,true);}finally{state.busy=false;update();}

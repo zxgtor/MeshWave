@@ -46,6 +46,10 @@ export function setText(node,value,literal=false){
   return value;
 }
 export const getSourceText=node=>bindings.get(node)?.source??node.textContent;
+export function clearText(node){
+  bindings.delete(node);
+  node.replaceChildren();
+}
 export function appendText(node,value){
   return setText(node,getSourceText(node)+String(value??''));
 }

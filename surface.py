@@ -152,20 +152,33 @@ class FlipGuard:
     def minimum_ratio(self, vertices):
         return float(np.min(np.sum(face_vectors(vertices, self.faces) * self.normal, axis=1) / self.area))
 
-    def safe_step(self, current, proposal):
+    def _area_path(self, current, proposal):
         tri, delta = current[self.faces], (proposal - current)[self.faces]
         e1, e2 = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]
         d1, d2 = delta[:, 1] - delta[:, 0], delta[:, 2] - delta[:, 0]
         a = np.sum(np.cross(d1, d2) * self.normal, axis=1) / self.area
         b = np.sum((np.cross(d1, e2) + np.cross(e1, d2)) * self.normal, axis=1) / self.area
         c = np.sum(np.cross(e1, e2) * self.normal, axis=1) / self.area
+        return a, b, c
+
+    @staticmethod
+    def _path_minimum(a, b, c, alpha):
+        minimum = np.minimum(c, a * alpha * alpha + b * alpha + c)
+        convex = a > 1e-30
+        t = np.zeros_like(a)
+        t[convex] = np.clip(-b[convex] / (2 * a[convex]), 0, alpha)
+        minimum[convex] = np.minimum(minimum[convex], (a * t * t + b * t + c)[convex])
+        return minimum
+
+    def limiting_faces(self, current, proposal, alpha=.125):
+        """Faces that violate the same area bound anywhere along this step."""
+        return np.flatnonzero(self._path_minimum(*self._area_path(current, proposal), alpha) < self.min_ratio)
+
+    def safe_step(self, current, proposal):
+        a, b, c = self._area_path(current, proposal)
         alpha = 1.
         for _ in range(22):
-            minimum = np.minimum(c, a * alpha * alpha + b * alpha + c)
-            convex = a > 1e-30
-            t = np.zeros_like(a)
-            t[convex] = np.clip(-b[convex] / (2 * a[convex]), 0, alpha)
-            minimum[convex] = np.minimum(minimum[convex], (a * t * t + b * t + c)[convex])
+            minimum = self._path_minimum(a, b, c, alpha)
             if np.all(minimum >= self.min_ratio):
                 return alpha
             alpha *= .5

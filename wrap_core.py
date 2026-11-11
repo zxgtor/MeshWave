@@ -5,6 +5,7 @@ from scipy.sparse.linalg import splu
 from time import perf_counter
 from surface import TriangleSurface, FlipGuard, vertex_normals
 from multires import solve_stages
+from local_guard import local_safe_solve
 
 MAX_SOURCE = 100000
 MAX_TARGET = 200000
@@ -211,6 +212,7 @@ def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, exclude
     stages=solve_stages(adjacency,free,base,left,active,iterations,solver_mode)
     hierarchy_seconds=perf_counter()-hierarchy_started
     stage_reports=[];global_step=0;correspondence_queries=0
+    local_faces=set();local_vertices=set();local_rounds=0
     stage_distance=float(np.mean(surface.query((base+displacement)[active])[1])*unit)
     for stage in stages:
         stage_started=perf_counter();basis=stage['basis'];ids=stage['ids'];mass=stage['mass']
@@ -220,6 +222,8 @@ def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, exclude
         regularizer_anchor=basis.T@(regularizer@anchor)
         identity_anchor=basis.T@anchor
         before=stage_distance;completed=0;blocked=False
+        coefficients=np.zeros((basis.shape[1],3));frozen=np.zeros(basis.shape[1],bool)
+        equality=sparse.csr_matrix((0,basis.shape[1]));values=np.empty((0,3))
         for local_step in range(stage['budget']):
             current=base+displacement
             normals=vertex_normals(current,faces)
@@ -234,21 +238,19 @@ def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, exclude
             alpha=smoothness*10**(-2*(global_step+local_step)/max(iterations-1,1))
             data_matrix=(sample_basis.T@sparse.diags(weight)@sample_basis).tocsc()
             data_rhs=sample_basis.T@(weight[:,None]*(closest-base[ids]-anchor[ids]))
+            locally_limited=False
             for attempt in range(5):
                 stiffness=alpha*4**attempt
                 matrix=data_matrix+stiffness*projected_regularizer+1e-6*projected_identity
                 rhs=data_rhs-stiffness*regularizer_anchor-1e-6*identity_anchor
-                proposal=anchor.copy()
-                if basis.shape[1]:
-                    proposal+=basis@splu(matrix.tocsc()).solve(rhs)
-                proposal[constrained]=pins
-                if not np.isfinite(proposal).all():
-                    raise ValueError('求解失败；请检查模型和对应点。')
-                step_scale=guard.safe_step(current,base+proposal)
+                candidate,step_scale,faces_limited,rounds=local_safe_solve(matrix,rhs,equality,values,basis,base,anchor,coefficients,frozen,guard)
+                if faces_limited:
+                    locally_limited=True;local_faces.update(faces_limited);local_rounds+=rounds
+                    local_vertices.update(np.flatnonzero(basis[:,frozen].getnnz(axis=1)).tolist())
                 if step_scale>=.125 or attempt==4:
                     break
                 stabilization_retries+=1
-            if step_scale<1 or attempt:
+            if step_scale<1 or attempt or locally_limited:
                 limited_steps+=1;smallest_step=min(smallest_step,step_scale)
             if step_scale<1e-6:
                 blocked=True
@@ -256,7 +258,8 @@ def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, exclude
                 # can still move safely. Only the final stage stops the solve.
                 stopped=stage is stages[-1]
                 break
-            displacement+=step_scale*(proposal-displacement)
+            coefficients+=step_scale*(candidate-coefficients)
+            displacement=anchor+basis@coefficients
             displacement[constrained]=pins;completed+=1
             sample_distance=surface.query((base+displacement)[ids])[1]
             history.append(float(np.average(sample_distance,weights=mass)*unit))
@@ -265,7 +268,7 @@ def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, exclude
         stage_reports.append({'name':stage['name'],'controlVertices':basis.shape[1],
             'sampleVertices':len(ids),'iterations':completed,'requestedIterations':stage['budget'],
             'initialMeanDistance':before,'finalMeanDistance':stage_distance,
-            'blockedByFlipGuard':blocked,'seconds':perf_counter()-stage_started})
+            'blockedByFlipGuard':blocked,'locallyFrozenControls':int(frozen.sum()),'seconds':perf_counter()-stage_started})
         global_step+=stage['budget']
     result = (base + displacement) * unit + center
     final_normals = vertex_normals(base + displacement, faces)
@@ -287,6 +290,6 @@ def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, exclude
         'normalFilteredNearestVertices': int(np.sum(active & filtered_nearest)),
         'flipLimitedSteps': limited_steps, 'minimumStepScale': smallest_step,
         'stabilizationRetries': stabilization_retries,
-        'stoppedByFlipGuard': stopped, 'minimumProjectedAreaRatio': guard.minimum_ratio(base + displacement),
+        'stoppedByFlipGuard': stopped,'localGuardFaces':len(local_faces),'localGuardVertices':len(local_vertices),'localGuardRounds':local_rounds, 'minimumProjectedAreaRatio': guard.minimum_ratio(base + displacement),
         'ignoredDegenerateTargetFaces': surface.ignored_degenerate,
         'excludedSourceVertices': len(excluded_source), 'excludedTargetFaces': len(masks['target'][0])}}

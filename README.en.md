@@ -24,6 +24,8 @@ A local 3D mesh fitting tool that wraps a template onto a scan while preserving 
 
 Template regions can stay fixed after alignment or follow surrounding deformation without surface attraction. Paint weights after an initial fit and solve again: 0% preserves the aligned template position; positive weights scale surface attraction. Hard point constraints take priority. Region mode and weights are preserved in projects and batch snapshots.
 
+Local flip protection holds risky deformation controls at their current safe values and re-solves the remaining regions. Hard correspondences, fixed regions, and the original 1% projected-area bound along the complete update path remain enforced.
+
 For detailed controls and limitations, see the [user guide (Chinese)](docs/user-guide.md).
 
 ## Screenshots
