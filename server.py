@@ -57,6 +57,8 @@ class Handler(SimpleHTTPRequestHandler):
             if not 0 < size <= 96 * 1024 * 1024:
                 raise ValueError('请求大小上限为 96 MB。')
             body = json.loads(self.rfile.read(size))
+            if not isinstance(body, dict):
+                raise ValueError('请求内容必须为 JSON 对象。')
             if self.path == '/api/mesh':
                 self.reply(200, mesh_data(body['text']))
             elif self.path == '/api/texture':

@@ -472,6 +472,14 @@ function syncBrushGeometry(change){
   const context=brush.context,view=views.source,g=view.mesh.geometry,position=g.attributes.position,normal=g.attributes.normal;
   for(const id of change.ids){const p=context.vertex(id);state.result.vertices[id]=p;if(g.index)position.setXYZ(id,...p);else for(const corner of context.corners[id])position.setXYZ(corner,...p);}
   for(const id of change.normals){const n=context.normal(id);if(g.index)normal.setXYZ(id,...n);else for(const corner of context.corners[id])normal.setXYZ(corner,...n);}
+  const regionGeometry=view.exclusions?.geometry;
+  if(regionGeometry){
+    const regionPosition=regionGeometry.attributes.position;
+    for(const id of change.ids)regionPosition.setXYZ(id,...context.vertex(id));
+    regionPosition.needsUpdate=true;regionGeometry.boundingBox=null;regionGeometry.boundingSphere=null;
+  }
+  // fit() caches a box; invalidate it when brush edits change its bounds.
+  g.boundingBox=null;
   position.needsUpdate=true;normal.needsUpdate=true;
   if(g.boundingSphere)g.boundingSphere.radius+=change.maxMovement||0;
   qualityUI?.clear(true,true);

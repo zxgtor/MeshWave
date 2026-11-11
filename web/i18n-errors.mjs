@@ -1,4 +1,5 @@
 export default `
+请求内容必须为 JSON 对象。	The request must be a JSON object.
 扫描尺寸无效，无法检测异常。	Invalid scan dimensions for anomaly detection.
 质量检查的结果顶点无效或模板过大。	Invalid result vertices or template too large for quality inspection.
 质量检查的表面距离无效。	Invalid surface distances in quality inspection.

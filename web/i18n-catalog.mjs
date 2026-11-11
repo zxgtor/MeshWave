@@ -145,7 +145,7 @@ Shift + 点击模型，红色为排除区域。模板区域在整体对齐后固
 撤销笔刷	Undo Stroke
 重做笔刷	Redo Stroke
 完成贴合后，选择笔刷并在左侧拖动。	After fitting, choose a brush and drag on the left mesh.
-左键拖动修正，Alt + 左键旋转，右键平移，Esc 取消当前笔画。对应点与排除区锁定；半径按目标尺寸计。投射最远为笔刷半径，沿用贴合法线夹角，跳过目标排除区。修改后需重新烘焙贴图。	Left-drag to edit, Alt + left-drag to rotate, right-drag to pan, Esc to cancel a stroke. Correspondences and excluded regions are locked. Radius is relative to target size. Projection uses the brush radius and fitting normal angle, skipping excluded target faces. Rebake after geometry edits.
+左键拖动修正，Alt + 左键旋转，右键平移，Esc 取消当前笔画。对应点与固定区域锁定；半径按目标尺寸计。投射最远为笔刷半径，沿用贴合法线夹角，跳过目标排除区。修改后需重新烘焙贴图。	Left-drag to edit, Alt + left-drag to rotate, right-drag to pan, Esc to cancel a stroke. Correspondences and fixed template regions are locked. Radius is relative to target size. Projection uses the brush radius and fitting normal angle, skipping excluded target faces. Rebake after geometry edits.
 纹理与烘焙	Textures and Baking
 模板贴图（预览）	Template Texture (Preview)
 选择 PNG / JPEG	Choose PNG / JPEG

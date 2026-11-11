@@ -79,7 +79,7 @@ def export_obj(text, vertices):
         p = line.strip().split()
         if p and p[0] == 'v':
             suffix = (' ' + ' '.join(p[4:])) if len(p) > 4 else ''
-            lines.append('v ' + ' '.join(format(x, '.10g') for x in v[index]) + suffix)
+            lines.append('v ' + ' '.join(format(x, '.17g') for x in v[index]) + suffix)
             index += 1
         elif p and p[0] == 'vn':
             continue

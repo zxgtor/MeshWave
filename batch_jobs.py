@@ -214,7 +214,15 @@ class BatchManager:
             try:
                 job['items'].sort(key=lambda i:[int(s) if re.fullmatch('[0-9]+',s) else s for s in re.split(r'([0-9]+)',i['name'].casefold())]);job['status']='running';job['startedAt']=time.time();self._save(job)
                 thread=threading.Thread(target=self._run,args=(job_id,),daemon=True);self.threads[job_id]=thread;thread.start()
-            except Exception:self.solver.release();job['status']='failed';raise
+            except Exception as exc:
+                self.solver.release();self.threads.pop(job_id,None);job.update(status='failed',error=str(exc)[:1000],finishedAt=time.time())
+                for item in job['items']:
+                    if item['status']=='pending':item.update(status='skipped',error='任务异常停止。')
+                # Persist a worker-start failure rather than leaving a phantom
+                # running job on disk. Preserve the original error if disk I/O fails.
+                try:self._save(job);self._archive(job)
+                except Exception:pass
+                raise
             return self._public(job)
 
     def status(self,job_id):

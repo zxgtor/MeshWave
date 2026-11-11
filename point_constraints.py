@@ -44,12 +44,13 @@ def validate_pairs(pairs,meshes,minimum=0,excluded=None):
         raise ValueError('请选取 3–100 对对应点，建议至少 6 对。' if minimum else '现有对应点格式无效。')
     result=[[] for _ in pairs]
     for column,side in enumerate(['source','target']):
-        vertices,faces=meshes[side];seen=set()
+        vertices,faces=meshes[side];seen=set();unit=None
         blocked=set(np.unique(faces[(excluded or {}).get(side,[])]).tolist()) if len(faces) else set()
         for pair,out in zip(pairs,result):
             point=handle_shape(pair[column],len(vertices),faces)
             if isinstance(point,dict):
-                tri=vertices[faces[point['face']]];unit=max(np.linalg.norm(np.ptp(vertices,axis=0)),1e-30)
+                if unit is None:unit=max(np.linalg.norm(np.ptp(vertices,axis=0)),1e-30)
+                tri=vertices[faces[point['face']]]
                 if np.linalg.norm(np.cross((tri[1]-tri[0])/unit,(tri[2]-tri[0])/unit))<1e-14:raise ValueError('表面点不能位于退化三角面。')
             key=point_key(point,faces)
             if key in seen:raise ValueError('对应点索引无效或重复。')
@@ -74,8 +75,10 @@ def positions(vertices,faces,points):
 def solve_affine(matrix,rhs,constraints,values):
     """Solve a positive system subject to C*x=d; remove only consistent redundancy."""
     if not constraints.shape[0]:return splu(matrix.tocsc()).solve(rhs)
-    gram=(constraints@constraints.T).toarray()
-    _,r,order=qr(gram,pivoting=True)
+    # QR of C.T preserves the conditioning of close, independent points.
+    # Forming C*C.T squares the condition number and can erase valid rows.
+    compact=constraints.tocsr();columns=np.unique(compact.indices)
+    _,r,order=qr(compact[:,columns].toarray().T,mode='economic',pivoting=True)
     diagonal=np.abs(np.diag(r));rank=int(np.count_nonzero(diagonal>max(float(diagonal.max(initial=0))*1e-10,1e-13)))
     if rank:
         selected=order[:rank];c=constraints[selected].tocsc()
