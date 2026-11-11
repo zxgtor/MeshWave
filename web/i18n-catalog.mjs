@@ -254,4 +254,21 @@ Shift + 点击模型，红色为排除区域。模板区域在整体对齐后固
 下载修复 OBJ	Download Repaired OBJ
 应用修复并清空约束	Apply Repair and Clear Constraints
 烘焙贴图预览	Baked texture preview
+共享拟合任务	Shared fit tasks
+选择共享任务	Select a shared task
+查看任务	View task
+取消任务	Cancel task
+拟合进度	Fit progress
+网页、API 与 MCP 任务在此同步；查看任务会载入其模型与约束。	Web, API and MCP tasks sync here. Viewing a task loads its models and constraints.
+任务服务连接失败，正在重试。	Task service unavailable. Retrying.
+排队中	Queued
+运行中	Running
+正在取消	Cancelling
+已完成	Completed
+服务已中断	Service interrupted
+阶段预览	Stage preview
+预览未采用	Preview not applied
+平均距离	Mean distance
+正在查看其他任务。	Another task is being viewed.
+查看任务将替换当前工作区。请先保存未保存的工程，是否继续？	Viewing a task replaces this workspace. Save unsaved work first. Continue?
 `.trim().split('\n').map(line=>line.split('\t'));

@@ -1,3 +1,4 @@
+import {TaskUI} from './tasks.mjs';
 import {setText,clearText,appendText,setLabel,translate,getSourceText,preserveName,initializeLanguage} from './i18n.mjs';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -11,13 +12,13 @@ import {pointPosition,pointSupport,samePoint,pointLabel,pointFromHit,pairKey} fr
 
 initializeLanguage();
 const $ = id => document.getElementById(id);
-const state = { source: null, target: null, pairs: [], pending: null, result: null, busy: false,
+const state = { source: null, target: null, pairs: [], pending: null, result: null, busy: false, taskPreview:null,
   edit: null, excludedFaces: {source:new Set(),target:new Set()}, sourceRegionMode: 'fixed', regionUndo: [], dirty:false,
   autoSuggestion:null, autoMessage:'尚未自动检测',brushWeights:null,curves:[],curvePairs:[],curvePaths:null,curveSuggestion:null,curveIndex:0,flowSuggestion:null,flowUi:null };
 const views = {};
 const brush={context:null,surface:null,history:new StrokeHistory(),stroke:null,pointer:null,lastTime:0,cursor:null};
 const health={viewer:null,text:null,name:'',side:'source',report:null,repair:null,after:false,fromCurrent:false,undo:null};
-let batchUI=null,qualityUI=null;
+let batchUI=null,qualityUI=null,taskUI=null;
 function status(text, error = false) { setText($('status'),text); $('status').classList.toggle('error', error); }
 function changed() {discardFlowPreview();state.dirty=true;health.undo=null;state.curvePairs=currentCurvePairs();state.curveSuggestion=null;if(state.autoSuggestion){state.autoSuggestion=null;state.autoMessage='编辑状态已变化，旧检测建议已清除。';}}
 function download(text, name, type='application/json') {
@@ -64,7 +65,7 @@ function setupView(side, color) {
     const ray=new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1),camera);
     const hit=ray.intersectObject(v.mesh)[0]; if(!hit) return;
     if(!['points','curves'].includes($('tool').value)&&!(side==='source'&&qualityUI?.inspecting)){selectRegion(side,hit.faceIndex);return;}
-    const vertices=side==='source'&&state.result?state.result.vertices:state[side].vertices;
+    const vertices=side==='source'?(state.taskPreview||state.result?.vertices||state.source.vertices):state[side].vertices;
     const candidates=state[side].faces[hit.faceIndex];
     const id=candidates.reduce((a,b)=>new THREE.Vector3().fromArray(vertices[a]).distanceToSquared(hit.point)<new THREE.Vector3().fromArray(vertices[b]).distanceToSquared(hit.point)?a:b);
     if(side==='source'&&qualityUI?.inspecting){qualityUI.select(id);return;}
@@ -115,7 +116,7 @@ function blockedVertices(side) {
 function refreshExclusions(side) {
   const v=views[side];disposeMesh(v.exclusions);v.exclusions=null;
   if(!state[side]||!state.excludedFaces[side].size||side==='source'&&qualityUI?.enabled)return;
-  const vertices=side==='source'&&state.result?state.result.vertices:state[side].vertices;
+  const vertices=side==='source'?(state.taskPreview||state.result?.vertices||state.source.vertices):state[side].vertices;
   const faces=[...state.excludedFaces[side]].map(i=>state[side].faces[i]);
   const mesh=new THREE.Mesh(geometry(vertices,faces),new THREE.MeshBasicMaterial({color:side==='source'&&state.sourceRegionMode==='follow'?0x4ebdcc:0xf0655b,transparent:true,opacity:.75,side:THREE.DoubleSide,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
   v.group.add(mesh);v.exclusions=mesh;
@@ -154,6 +155,7 @@ function fit(side) {
   v.camera.near=r/1000;v.camera.far=distance+r*100;v.camera.updateProjectionMatrix();v.controls.update();
 }
 function clearResult() {
+  state.taskPreview=null;
   qualityUI?.clear();
   discardFlowPreview();
   setText($('flow-info'),'完成几何贴合并加载两侧贴图后，可进行纹理细化。');
@@ -238,7 +240,7 @@ function renderMarkers() {
     const suggestion=state.autoSuggestion;
     const points=(suggestion?suggestion.pairs:state.pairs).map(p=>p[side==='source'?0:1]);
     if(!suggestion&&side==='source'&&state.pending!==null)points.push(state.pending);
-    const vertices=side==='source'&&state.result?state.result.vertices:state[side].vertices;
+    const vertices=side==='source'?(state.taskPreview||state.result?.vertices||state.source.vertices):state[side].vertices;
     points.forEach((id,i)=>{const div=document.createElement('div');div.className='marker';div.classList.toggle('suggested',Boolean(suggestion));div.classList.toggle('editing',state.edit?.index===i&&state.edit.side===side);setText(div,suggestion?`A${i+1}`:i+1);if(suggestion)setLabel(div,'title',suggestion.names[i]);const marker=new CSS2DObject(div);marker.position.fromArray(pointPosition(vertices,state[side].faces,id));v.group.add(marker);v.markers.push(marker);});
   }
 }
@@ -406,15 +408,18 @@ $('run').onclick=async()=>{
   clearResult();changed();
   state.busy=true;update();status($('solver-mode').value==='multistage'?'正在从粗到细求解，较大模型可能需要数分钟…':'正在单阶段求解，较大模型可能需要数分钟…');
   try{
-    state.result=await api('wrap',{source:state.source.text,target:state.target.text,pairs:state.pairs,iterations:Number($('iterations').value),smoothness:Number($('smoothness').value),normalAngle:Number($('normal-angle').value),solverMode:$('solver-mode').value,brushWeights:state.brushWeights?Array.from(state.brushWeights):null,excludedFaces:serializedExclusions()});changed();
+    state.result=await taskUI.run({source:state.source.text,sourceName:state.source.name,targetName:state.target.name,target:state.target.text,pairs:state.pairs,iterations:Number($('iterations').value),smoothness:Number($('smoothness').value),normalAngle:Number($('normal-angle').value),solverMode:$('solver-mode').value,brushWeights:state.brushWeights?Array.from(state.brushWeights):null,excludedFaces:serializedExclusions()});changed();
+    presentFit(state.result);
+  }catch(error){state.taskPreview=null;setMesh('source',state.result?.vertices);status(error.message,true);}finally{state.busy=false;update();}
+};
+function presentFit(result){state.taskPreview=null;state.result=result;
     setMesh('source',state.result.vertices);fit('source');$('result-badge').hidden=false;
     const s=state.result.stats;const metrics=$('metrics');metrics.hidden=false;clearText(metrics);
     for(const text of [`平均三角面距离　${s.initialMeanDistance.toPrecision(4)} → ${s.finalMeanDistance.toPrecision(4)}`,`对应点最大误差　${s.landmarkMaxError.toExponential(2)}`,`法线过滤 ${s.normalFilteredNearestVertices} 个最近匹配 · 防翻面限步 ${s.flipLimitedSteps} 次`,`${s.iterations}/${s.requestedIterations} 次迭代 · 顶点数与拓扑保留`]){const el=document.createElement('strong');setText(el,text);metrics.append(el);}
     if(s.localGuardVertices){const el=document.createElement('strong');setText(el,`局部保护顶点数　${s.localGuardVertices}`);metrics.append(el);}
     showStages(s);
     status(s.stoppedByFlipGuard?'防翻面保护已提前停止迭代，保留最后安全结果；请检查对应点和局部形变。':'贴合完成。请旋转视图、叠加目标检查结果。');
-  }catch(error){status(error.message,true);}finally{state.busy=false;update();}
-};
+}
 function showStages(stats){
   const container=$('stage-results');container.replaceChildren();container.hidden=!stats.stages?.length;if(container.hidden)return;
   const table=document.createElement('table'),caption=document.createElement('caption');setText(caption,`${stats.solverMode==='multistage'?'多阶段':'单阶段'} · 总耗时 ${stats.totalSeconds.toFixed(2)} 秒 · 匹配查询 ${stats.correspondenceQueries.toLocaleString()} 点次`);table.append(caption);
@@ -827,3 +832,27 @@ try{views.source=setupView('source',0xa8afb9);views.target=setupView('target',0x
   function animate(time=performance.now()){requestAnimationFrame(animate);processBrushFrame(time);for(const v of Object.values(views)){v.controls.update();v.renderer.render(v.scene,v.camera);v.labels.render(v.scene,v.camera);}if($('health-dialog').open)health.viewer?.render();}animate();
 }catch(error){status(`三维视图初始化失败：${error.message}`,true);}
 
+
+if(views.source&&views.target){
+  taskUI=new TaskUI({
+    canOpen:()=>!state.busy,
+    confirmOpen:()=>!state.dirty||confirm(translate('查看任务将替换当前工作区。请先保存未保存的工程，是否继续？')),
+    busy:value=>{state.busy=value;update();},
+    load:async body=>{
+      await api('batch-constraints',{source:body.source,target:body.target,pairs:body.pairs,excludedFaces:body.excludedFaces||{},name:'task.obj'});
+      await load('source',body.source,body.sourceName||'template.obj');
+      await load('target',body.target,body.targetName||'target.obj');
+      if(body.brushWeights&&(!Array.isArray(body.brushWeights)||body.brushWeights.length!==state.source.vertices.length||body.brushWeights.some(w=>typeof w!=='number'||!Number.isFinite(w)||w<0||w>1)))throw new Error(translate('几何软权重必须与模板顶点一一对应，范围为 0–1。'));
+      state.pairs=body.pairs;state.pending=null;state.excludedFaces={source:new Set(body.excludedFaces?.source||[]),target:new Set(body.excludedFaces?.target||[])};
+      state.sourceRegionMode=body.excludedFaces?.sourceMode||'fixed';$('source-region-mode').value=state.sourceRegionMode;
+      state.brushWeights=body.brushWeights?Float64Array.from(body.brushWeights):null;
+      $('iterations').value=body.iterations??20;$('normal-angle').value=body.normalAngle??60;$('solver-mode').value=body.solverMode||'single';
+      const smooth=String(body.smoothness??4);if(![...$('smoothness').options].some(o=>o.value===smooth))$('smoothness').add(new Option(smooth,smooth));$('smoothness').value=smooth;
+      $('tool').value='points';$('brush-tool').value='navigate';update();
+    },
+    preview:vertices=>{const first=!state.taskPreview;state.taskPreview=vertices;setMesh('source',vertices);renderMarkers();if(first)fit('source');},
+    complete:result=>{changed();presentFit(result);},
+    rollback:()=>{state.taskPreview=null;if(state.source)setMesh('source',state.result?.vertices);},
+    error:error=>status(error.message,true)
+  });
+}

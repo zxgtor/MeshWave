@@ -127,6 +127,9 @@
 <p class="hint">每批最多 50 项，单 OBJ ≤ 18 MB，单贴图 ≤ 8 MB / 16 百万像素，上传及未压缩输出各 ≤ 256 MB。按文件名数字顺序求解；勾选烘焙后导出各项 OBJ、MTL、PNG 和报告。建议启动前保存工程；关闭页面后后台继续，本地服务停止则中断。</p></section></aside>
 <div class="workspace">
 <div class="toolbar"><div><strong id="phase">准备模型</strong><span id="instruction">导入两个模型，或载入演示体验完整流程</span></div><div class="view-tools"><label><input id="show-textures" type="checkbox" checked> 纹理</label><label><input id="unlit-textures" type="checkbox" checked> 原色</label><label><input id="wire" type="checkbox"> 线框</label><label><input id="overlay" type="checkbox" disabled> 叠加目标</label><button id="fit">视图复位</button></div></div>
+<div class="task-monitor" aria-label="共享拟合任务">
+<div class="task-controls"><strong>共享拟合任务</strong><label for="task-select" class="sr-only">选择共享任务</label><select id="task-select"><option value="">选择共享任务</option></select><button id="task-view" disabled>查看任务</button><button id="task-cancel" disabled>取消任务</button></div>
+<div class="task-status"><progress id="task-progress" max="1" value="0" aria-label="拟合进度"></progress><span id="task-info" role="status">网页、API 与 MCP 任务在此同步；查看任务会载入其模型与约束。</span><span id="task-connection" class="error" hidden>任务服务连接失败，正在重试。</span></div></div>
 <div class="viewports"><section class="viewport" id="source-view"><div class="view-label"><span class="source-dot">●</span> 模板 <span id="result-badge" hidden>贴合结果</span></div><div id="quality-legend" class="quality-legend" hidden><span id="quality-legend-label"></span><div class="quality-gradient"></div><span id="quality-legend-note"></span></div><div class="placeholder">导入模板模型<small>顶点与拓扑将保留</small></div></section><section class="viewport" id="target-view"><div class="view-label"><span class="target-dot">●</span> 目标</div><div class="placeholder">导入目标模型<small>选择与模板相同的部位</small></div></section></div>
 <div id="metrics" hidden></div>
 <div id="stage-results" hidden></div>

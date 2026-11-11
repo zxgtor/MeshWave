@@ -31,3 +31,10 @@ html[lang=en] .marker{width:max-content;min-width:22px;padding:0 4px;white-space
   #stage-results{max-height:20dvh}
   footer{overflow-wrap:anywhere}
 }
+
+.task-monitor{flex-shrink:0;border-bottom:1px solid var(--line);padding:10px 20px;background:var(--panel);font-size:11px}
+.task-controls,.task-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.task-controls strong{font-weight:600}.task-controls select{min-width:160px;max-width:280px;font-size:11px;padding:5px}
+.task-controls button{padding:5px 10px;font-size:11px}.task-status{margin-top:8px;color:var(--muted)}
+.task-status progress{width:120px;height:7px;accent-color:var(--accent)}.task-status .error{color:#ffada2}
+@media(max-width:760px){.task-monitor{padding:12px}.task-controls select{max-width:100%}}

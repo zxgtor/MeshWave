@@ -8,8 +8,11 @@ A local 3D mesh fitting tool that wraps a template onto a scan while preserving 
 
 ## Main features
 
+New: [headless API, MCP and shared task monitoring](docs/automation.en.md), with bilingual fit progress, stage mesh previews and running-task cancellation.
+
 | Feature | Description |
 | --- | --- |
+| API and MCP | Headless HTTP service, MCP tools, shared fit progress/stage previews and running-task cancellation |
 | Mesh fitting | Single-stage or coarse-to-fine solving, exact triangle-surface distances, normal filtering, and local triangle flip prevention |
 | Fit quality inspection | Error heatmap, adjustable threshold, global/local mean, RMS, P95, maximum error, and normal issue counts |
 | Points and curves | Continuous surface or vertex pairs with editing; frontal face landmark suggestions; arc-length sampling of cubic surface splines |

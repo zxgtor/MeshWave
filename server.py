@@ -16,10 +16,12 @@ from mesh_health import diagnose_mesh, repair_mesh
 from optical_flow import refine_texture
 from fit_quality import inspect_fit
 from batch_jobs import BatchManager, BatchBusy, constraints_manifest
+from task_service import TaskManager, TaskBusy
 
 ROOT = Path(__file__).parent
 SOLVER = BoundedSemaphore(1)
 BATCH = BatchManager(ROOT / 'output' / 'batches', SOLVER)
+TASKS = TaskManager(ROOT / 'output' / 'tasks', SOLVER)
 
 
 class LocalServer(ThreadingHTTPServer):
@@ -39,6 +41,20 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         request=urlparse(self.path)
+        if request.path == '/api/health':
+            return self.reply(200, {'app':'Mesh Wave','apiVersion':1,'headless':getattr(self.server,'headless',False)})
+        if request.path == '/api/tasks' or request.path.startswith('/api/tasks/'):
+            try:
+                if request.path == '/api/tasks':return self.reply(200, {'tasks':TASKS.list()})
+                parts=request.path.split('/')[3:];task_id=parts[0]
+                if len(parts)==1:return self.reply(200,TASKS.status(task_id))
+                if len(parts)==2 and parts[1]=='export':
+                    result=TASKS.read(task_id,'result');body=TASKS.read(task_id,'input')
+                    return self.binary_reply(200,export_obj(body['source'],result['vertices']).encode('utf-8'),'text/plain; charset=utf-8')
+                if len(parts)==2:return self.reply(200,TASKS.read(task_id,parts[1]))
+                raise ValueError('Unknown task endpoint.')
+            except ValueError as exc:return self.reply(400,{'error':str(exc)})
+        if getattr(self.server,'headless',False) and request.path!='/api/batch-download':return self.send_error(404)
         if request.path!='/api/batch-download':return super().do_GET()
         try:
             job_id=parse_qs(request.query).get('jobId',[''])[0];path=BATCH.download_path(job_id)
@@ -61,6 +77,12 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError('请求内容必须为 JSON 对象。')
             if self.path == '/api/mesh':
                 self.reply(200, mesh_data(body['text']))
+            elif self.path == '/api/tasks':
+                self.reply(202, TASKS.submit(body))
+            elif self.path.startswith('/api/tasks/') and self.path.endswith('/cancel'):
+                parts=self.path.split('/')
+                if len(parts)!=5:raise ValueError('Unknown task endpoint.')
+                self.reply(200,TASKS.cancel(parts[3]))
             elif self.path == '/api/texture':
                 self.reply(200, normalize_texture(body))
             elif self.path in ('/api/wrap', '/api/bake', '/api/landmarks', '/api/flow-refine', '/api/fit-quality'):
@@ -112,7 +134,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self.binary_reply(200, texture_bundle(body['source'], body['vertices'], body['texture']), 'application/zip')
             else:
                 self.reply(404, {'error': '接口不存在。'})
-        except BatchBusy as exc:
+        except (BatchBusy, TaskBusy) as exc:
             self.reply(409, {'error': str(exc)})
         except (ValueError, KeyError, TypeError, IndexError) as exc:
             self.reply(400, {'error': str(exc)})
@@ -136,7 +158,15 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=6188)
+    parser.add_argument('--headless', action='store_true', help='Serve APIs only; no web UI')
     args = parser.parse_args()
     server = LocalServer(('127.0.0.1', args.port), partial(Handler, directory=str(ROOT / 'web')))
+    server.headless = args.headless
     print(f'Mesh Wave: http://127.0.0.1:{args.port}', flush=True)
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        TASKS.close()
+        server.server_close()

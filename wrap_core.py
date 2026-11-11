@@ -132,13 +132,13 @@ def exclusion_masks(source_faces, target_faces, excluded_faces, pairs):
     return masks
 
 
-def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, excluded_faces=None, normal_angle=60, solver_mode='single', brush_weights=None):
+def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, excluded_faces=None, normal_angle=60, solver_mode='single', brush_weights=None, progress=None):
     from point_constraints import surface_pairs
     if (brush_weights is not None
             or isinstance(excluded_faces,dict) and excluded_faces.get('sourceMode')=='follow'
             or isinstance(pairs,list) and all(isinstance(p,list) and len(p)==2 for p in pairs) and surface_pairs(pairs)):
         from surface_wrap import wrap_surface
-        return wrap_surface(source_text,target_text,pairs,iterations,smoothness,excluded_faces,normal_angle,solver_mode,brush_weights)
+        return wrap_surface(source_text,target_text,pairs,iterations,smoothness,excluded_faces,normal_angle,solver_mode,brush_weights,progress=progress)
     started=perf_counter()
     source, faces = parse_obj(source_text)
     target, target_faces = parse_obj(target_text)
@@ -214,7 +214,8 @@ def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, exclude
     stage_reports=[];global_step=0;correspondence_queries=0
     local_faces=set();local_vertices=set();local_rounds=0
     stage_distance=float(np.mean(surface.query((base+displacement)[active])[1])*unit)
-    for stage in stages:
+    for stage_index, stage in enumerate(stages):
+        if progress:progress({'phase':'solving','stage':stage['name'],'stageIndex':stage_index+1,'stageCount':len(stages),'iteration':global_step,'requestedIterations':iterations},(base+displacement)*unit+center)
         stage_started=perf_counter();basis=stage['basis'];ids=stage['ids'];mass=stage['mass']
         anchor=displacement.copy();sample_basis=basis[ids].tocsr()
         projected_regularizer=(basis.T@regularizer@basis).tocsc()
@@ -263,12 +264,14 @@ def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, exclude
             displacement[constrained]=pins;completed+=1
             sample_distance=surface.query((base+displacement)[ids])[1]
             history.append(float(np.average(sample_distance,weights=mass)*unit))
+            if progress:progress({'phase':'solving','stage':stage['name'],'stageIndex':stage_index+1,'stageCount':len(stages),'iteration':global_step+completed,'requestedIterations':iterations,'meanDistance':history[-1]})
         _,stage_distances,stage_nearest=surface.query(base+displacement)
         stage_distance=float(np.mean(stage_distances[active])*unit)
         stage_reports.append({'name':stage['name'],'controlVertices':basis.shape[1],
             'sampleVertices':len(ids),'iterations':completed,'requestedIterations':stage['budget'],
             'initialMeanDistance':before,'finalMeanDistance':stage_distance,
             'blockedByFlipGuard':blocked,'locallyFrozenControls':int(frozen.sum()),'seconds':perf_counter()-stage_started})
+        if progress:progress({'phase':'stage_complete','stage':stage['name'],'stageIndex':stage_index+1,'stageCount':len(stages),'iteration':global_step+completed,'requestedIterations':iterations,'meanDistance':stage_distance},(base+displacement)*unit+center)
         global_step+=stage['budget']
     result = (base + displacement) * unit + center
     final_normals = vertex_normals(base + displacement, faces)

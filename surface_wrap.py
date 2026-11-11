@@ -8,7 +8,7 @@ from local_guard import local_safe_solve
 from point_constraints import validate_pairs,point_matrix,pair_support,solve_affine
 
 
-def wrap_surface(source_text,target_text,pairs,iterations,smoothness,excluded_faces,normal_angle,solver_mode,brush_weights=None):
+def wrap_surface(source_text,target_text,pairs,iterations,smoothness,excluded_faces,normal_angle,solver_mode,brush_weights=None,progress=None):
     from wrap_core import parse_obj,similarity,exclusion_masks,MAX_SOURCE
     started=perf_counter();source,faces=parse_obj(source_text);target,tf=parse_obj(target_text)
     if len(source)>MAX_SOURCE:raise ValueError('模板超过 100,000 顶点。')
@@ -47,7 +47,8 @@ def wrap_surface(source_text,target_text,pairs,iterations,smoothness,excluded_fa
     stage_reports=[];history=[];global_step=0;queries=0;limited=0;smallest=1.;retries=0;stopped=False
     local_faces=set();local_vertices=set();local_rounds=0
     stage_distance=float(surface.query((base+displacement)[active])[1].mean()*unit)
-    for stage in stages:
+    for stage_index,stage in enumerate(stages):
+        if progress:progress({'phase':'solving','stage':stage['name'],'stageIndex':stage_index+1,'stageCount':len(stages),'iteration':global_step,'requestedIterations':iterations},(base+displacement)*unit+center)
         start=perf_counter();basis=stage['basis'];ids=stage['ids'];mass=stage['mass'];anchor=displacement.copy();sample=basis[ids].tocsr()
         reg=(basis.T@regularizer@basis).tocsc();identity=(basis.T@basis).tocsc();reg_anchor=basis.T@(regularizer@anchor);identity_anchor=basis.T@anchor
         equality=c@basis;residual=goal-c@(base+anchor);before=stage_distance;completed=0;blocked=False
@@ -71,9 +72,12 @@ def wrap_surface(source_text,target_text,pairs,iterations,smoothness,excluded_fa
             coefficients+=scale*(candidate-coefficients)
             displacement=anchor+basis@coefficients;displacement[excluded]=0;completed+=1
             history.append(float(np.average(surface.query((base+displacement)[ids])[1],weights=mass)*unit))
+            if progress:progress({'phase':'solving','stage':stage['name'],'stageIndex':stage_index+1,'stageCount':len(stages),'iteration':global_step+completed,'requestedIterations':iterations,'meanDistance':history[-1]})
         _,stage_distances,stage_nearest=surface.query(base+displacement)
         stage_distance=float(stage_distances[active].mean()*unit)
-        stage_reports.append({'name':stage['name'],'controlVertices':basis.shape[1],'sampleVertices':len(ids),'iterations':completed,'requestedIterations':stage['budget'],'initialMeanDistance':before,'finalMeanDistance':stage_distance,'blockedByFlipGuard':blocked,'locallyFrozenControls':int(frozen.sum()),'seconds':perf_counter()-start});global_step+=stage['budget']
+        stage_reports.append({'name':stage['name'],'controlVertices':basis.shape[1],'sampleVertices':len(ids),'iterations':completed,'requestedIterations':stage['budget'],'initialMeanDistance':before,'finalMeanDistance':stage_distance,'blockedByFlipGuard':blocked,'locallyFrozenControls':int(frozen.sum()),'seconds':perf_counter()-start})
+        if progress:progress({'phase':'stage_complete','stage':stage['name'],'stageIndex':stage_index+1,'stageCount':len(stages),'iteration':global_step+completed,'requestedIterations':iterations,'meanDistance':stage_distance},(base+displacement)*unit+center)
+        global_step+=stage['budget']
     result=(base+displacement)*unit+center;normals=vertex_normals(base+displacement,faces);nearest=stage_nearest
     normal_distance=surface.query(base+displacement,normals,cosine)[1]
     return {'vertices':result.tolist(),'stats':{'initialMeanDistance':float(initial_distance[active].mean()*unit),'finalMeanDistance':stage_distance,'landmarkMaxError':float(np.linalg.norm(c@result-destination,axis=1).max()),'surfaceConstraintCount':sum(isinstance(p[0],dict) or isinstance(p[1],dict) for p in pairs),'iterations':len(history),'requestedIterations':iterations,'history':history,'solverMode':solver_mode,'stages':stage_reports,'stageCount':len(stages),'historyScope':'stage-sample' if len(stages)>1 else 'full-active-mesh','correspondenceQueries':queries,'hierarchySeconds':hierarchy_seconds,'totalSeconds':perf_counter()-started,'sampledSurface':False,'normalFilteredNearestVertices':int(np.count_nonzero(np.sum(normals*surface.face_normals[nearest],axis=1)[active]<cosine)),'flipLimitedSteps':limited,'minimumStepScale':smallest,'vertices':n,'triangles':len(faces),'distanceMethod':'exact-triangle-bvh','normalAngle':normal_angle,'normalRejectedVertices':int(np.count_nonzero(~np.isfinite(normal_distance[active]))),'minimumProjectedAreaRatio':guard.minimum_ratio(base+displacement),'ignoredDegenerateTargetFaces':surface.ignored_degenerate,'excludedSourceVertices':len(masks['source'][1]),'fixedSourceVertices':len(masks['fixedSource']),'followingSourceVertices':len(masks['source'][1]) if (excluded_faces or {}).get('sourceMode')=='follow' else 0,'protectedWeightVertices':int(np.count_nonzero((np.asarray(brush_weights)==0))) if brush_weights is not None else 0,'weightedGeometry':brush_weights is not None,'excludedTargetFaces':len(masks['target'][0]),'stoppedByFlipGuard':stopped,'stabilizationRetries':retries,'localGuardFaces':len(local_faces),'localGuardVertices':len(local_vertices),'localGuardRounds':local_rounds}}
