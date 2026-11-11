@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesh Wave · 网格贴合工作台</title>
+<link rel="icon" type="image/png" href="assets/mesh-wave-logo-studio.png">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="features.css">
+<link rel="stylesheet" href="studio.css">
+<link rel="stylesheet" href="layout.css">
+<script type="importmap">{"imports":{"three":"/vendor/three.module.js","three/addons/":"/vendor/addons/"}}</script>
+</head>
+<body>
+<header><div class="brand"><img class="brandmark" src="assets/mesh-wave-logo-studio.png" alt="" aria-hidden="true"><strong>Mesh <span>Wave</span></strong><small>网格贴合工作台</small></div><div class="project-tools"><span id="project-state">未保存</span><button id="open-project">打开工程</button><button id="save-project" disabled>保存工程</button><button id="demo">载入演示</button><input id="project-file" type="file" accept=".json" hidden></div></header>
+<main>
+<aside>
+<section><div class="section-title"><span>01</span><h2>导入模型</h2></div>
+<label class="file">模板模型 <span class="source-dot">●</span><input id="source" type="file" accept=".obj"><b id="source-name">选择 OBJ 文件</b><small id="source-info">保留此模型的拓扑和 UV</small></label>
+<label class="file">目标模型 <span class="target-dot">●</span><input id="target" type="file" accept=".obj"><b id="target-name">选择 OBJ 文件</b><small id="target-info">模板将贴合此模型的表面</small></label>
+<p class="hint">模板 ≤ 100,000 顶点（高精度需多阶段）<br>目标 ≤ 200,000 顶点 · 单文件 ≤ 18 MB</p></section>
+<section><div class="section-title"><span>02</span><h2>选择对应点</h2><b id="pair-count">0 对</b></div>
+<button id="auto-landmarks" disabled>自动识别人脸点</button>
+<p class="hint">先将两侧人脸放大并转到正面。使用灰模渲染检测，无需 UV；先预览建议，再采用或手动修正。已有贴合结果时先恢复原始模板。</p>
+<p id="auto-info" class="hint" role="status">尚未自动检测</p>
+<div id="auto-review" hidden><ol id="auto-points"></ol><p id="auto-skipped" class="hint"></p><button id="auto-apply" disabled>采用建议 · 替换点对</button><button id="auto-cancel" class="quiet" disabled>取消建议，保留原点对</button></div>
+<p class="hint">按住 Shift 点击模板，再点击目标的相同部位。至少 3 对不共线的点。点击列表中的模板点或目标点可重选，点对右侧可删除。</p>
+<div class="point-tools"><button id="undo" disabled>撤销一对</button><button id="clear" disabled>清空</button></div>
+<button id="cancel-edit" class="quiet" hidden>取消重选</button>
+<ol id="pairs"><li class="empty">尚未选择对应点</li></ol><div class="section-title"><h3>曲线对应</h3></div>
+<button id="curve-new" disabled>新增成对曲线</button>
+<div class="settings"><label for="curve-select">当前曲线</label><select id="curve-select" disabled></select><label for="curve-name">名称</label><input id="curve-name" type="text" maxlength="80" disabled><label for="curve-count">采样对数</label><input id="curve-count" type="number" min="2" max="30" value="8" disabled></div>
+<label class="hint"><input id="curve-closed" type="checkbox" disabled> 闭合曲线（两侧起点需对应）</label>
+<div class="point-tools"><button id="curve-undo-source" disabled>撤销左节点</button><button id="curve-undo-target" disabled>撤销右节点</button></div>
+<div class="point-tools"><button id="curve-reverse" disabled>反转右侧方向</button><button id="curve-delete" disabled>删除此曲线</button></div>
+<p class="hint">新增后 Shift + 点击两侧模型，依次绘制同一部位；每侧至少 2 个节点。按网格表面折线连接，非平滑样条。节点编号表示方向；过粗网格请减少采样数。已有结果请先恢复原始模板。</p>
+<button id="curve-generate" disabled>生成对应点预览</button>
+<div class="point-tools"><button id="curve-apply" disabled>采用曲线点</button><button id="curve-cancel" disabled>取消预览</button></div>
+<p id="curve-info" class="hint" role="status">曲线点采用后才参与求解。修改曲线后请重新生成并采用；采用前保留旧点对。</p></section>
+<section><div class="section-title"><span>03</span><h2>区域排除</h2></div>
+<div class="settings"><label for="tool">点击操作</label><select id="tool"><option value="points">对应点</option><option value="curves">绘制成对曲线</option><option value="exclude">排除区域</option><option value="restore">恢复区域</option></select><label for="region-size">选择范围</label><select id="region-size"><option value="0">单个三角面</option><option value="1" selected>周围 1 圈</option><option value="3">周围 3 圈</option></select></div>
+<p id="region-count" class="hint">模板 0 面 · 目标 0 面</p>
+<div class="point-tools"><button id="undo-region" disabled>撤销区域操作</button><button id="clear-regions" disabled>清空排除</button></div>
+<p class="hint">Shift + 点击模型，红色为排除区域。模板区域在整体对齐后固定；目标区域不参与贴合。对应点所在面不可排除。</p></section>
+<section><div class="section-title"><span>04</span><h2>贴合与导出</h2></div>
+<div class="settings"><label for="solver-mode">求解模式</label><select id="solver-mode"><option value="multistage" selected>多阶段 · 从粗到细</option><option value="single">单阶段 · 对照</option></select><label for="iterations">总迭代预算</label><input id="iterations" type="number" min="5" max="50" value="20"><label for="smoothness">形状保持</label><select id="smoothness"><option value="1">较弱 · 更贴近表面</option><option value="4" selected>标准</option><option value="12">较强 · 更保留形状</option></select><label for="normal-angle">法线夹角</label><input id="normal-angle" type="number" min="10" max="89" value="60"></div>
+<p class="hint quality-hint">多阶段先减少形变自由度与匹配采样，最后全顶点精修；保留拓扑和 UV。小模型会跳过不必要的粗层。</p>
+<p class="hint quality-hint">精确三角面匹配 · 法线过滤 · 防翻面已启用。夹角越小越严格，两侧面朝向需一致。</p>
+<button id="run" class="primary" disabled>开始非刚性贴合</button>
+<button id="export" disabled>导出贴合结果 · OBJ</button>
+<button id="reset" class="quiet" disabled>恢复原始模板</button>
+<p class="hint">保留顶点顺序、面和 UV。需要配套贴图时，请使用下方“导出纹理模型 · ZIP”。</p></section>
+<section><div class="section-title"><span>05</span><h2>笔刷修正</h2></div>
+<div class="settings"><label for="brush-tool">操作</label><select id="brush-tool" disabled><option value="navigate">浏览模型</option><option value="pull">外推 · 沿法线</option><option value="push">内压 · 反法线</option><option value="smooth">局部平滑</option><option value="project">表面投射</option><option value="smooth-project">贴面平滑</option><option value="weight-paint">绘制影响权重</option><option value="weight-smooth">平滑权重</option></select><label for="brush-radius">半径 %</label><input id="brush-radius" type="number" min="0.2" max="20" step="0.2" value="5"><label for="brush-strength">强度</label><input id="brush-strength" type="number" min="1" max="100" value="30"></div>
+<div class="settings"><label for="weight-target">绘制值 %</label><input id="weight-target" type="number" min="0" max="100" value="0"></div><label class="hint"><input id="show-weights" type="checkbox"> 显示影响权重</label><p class="hint">蓝色 0% 保护 → 金色 100% 完全影响；红色为硬锁定。绘制值决定目标权重，沿用上方半径和强度；权重影响手动笔刷和纹理细化。</p><div class="point-tools"><button id="weight-protect-all" disabled>全部保护</button><button id="weight-edit-all" disabled>全部可编辑</button></div><div class="point-tools"><button id="brush-undo" disabled>撤销笔刷</button><button id="brush-redo" disabled>重做笔刷</button></div>
+<p id="brush-info" class="hint" role="status">完成贴合后，选择笔刷并在左侧拖动。</p>
+<p class="hint">左键拖动修正，Alt + 左键旋转，右键平移，Esc 取消当前笔画。对应点与排除区锁定；半径按目标尺寸计。投射最远为笔刷半径，沿用贴合法线夹角，跳过目标排除区。修改后需重新烘焙贴图。</p></section>
+<section><div class="section-title"><span>06</span><h2>纹理与烘焙</h2></div>
+<label class="file texture-file">模板贴图（预览）<input id="source-texture" type="file" accept="image/png,image/jpeg"><b id="source-texture-name">选择 PNG / JPEG</b></label>
+<label class="file texture-file">目标 / 扫描贴图<input id="target-texture" type="file" accept="image/png,image/jpeg"><b id="target-texture-name">选择 PNG / JPEG</b></label>
+<div class="point-tools"><button id="remove-source-texture" disabled>移除模板贴图</button><button id="remove-target-texture" disabled>移除扫描贴图</button></div>
+<p class="hint">每侧一张贴图，需完整 OBJ UV。输入图 ≤ 8 MB、16 百万像素。先贴合，再烘焙扫描颜色到模板 UV。</p>
+<div class="settings bake-settings"><label for="bake-resolution">输出分辨率</label><select id="bake-resolution"><option value="256">256 × 256</option><option value="512">512 × 512</option><option value="1024" selected>1024 × 1024</option><option value="2048">2048 × 2048</option></select><label for="bake-padding">边缘扩展</label><input id="bake-padding" type="number" min="0" max="16" value="8"><label for="bake-distance">投射距离 %</label><input id="bake-distance" type="number" min="0.1" max="20" step="0.1" value="2"></div>
+<p class="hint">距离按目标包围盒对角线计；使用上方的法线夹角。未匹配和排除区保持透明；模板 UV 需不重叠、位于 0–1。</p>
+<button id="bake" class="primary" disabled>烘焙扫描纹理到模板 UV</button>
+<p id="bake-info" class="hint" role="status">尚未烘焙</p>
+<img id="texture-preview" alt="烘焙贴图预览" hidden>
+<button id="export-texture" disabled>导出贴图 · PNG</button>
+<button id="export-textured-model" disabled>导出纹理模型 · ZIP</button></section>
+<section><div class="section-title"><span>07</span><h2>网格诊断与清理</h2></div>
+<div class="settings"><label for="health-side">模型</label><select id="health-side"><option value="source">模板</option><option value="target">目标</option></select></div>
+<button id="health-current" disabled>诊断原始模型</button><button id="health-file">检查待修复 OBJ 文件</button><input id="health-upload" type="file" accept=".obj" hidden>
+<button id="health-undo" disabled>撤销上次修复</button><p class="hint">检测并高亮非流形边、无效面、孤立点及绕序冲突。普通导入失败的文件也可单独检查。先预览，再选择是否应用修复。</p></section><section><div class="section-title"><span>08</span><h2>纹理辅助贴合</h2></div>
+<p class="hint">先完成几何贴合，左侧调到正面；两侧需完整 UV 和同一人物、相近光照的贴图。模板贴图应来自中性表情，不使用当前目标的烘焙图作匹配。</p>
+<div class="settings"><label for="flow-resolution">分辨率</label><select id="flow-resolution"><option value="256">256</option><option value="384" selected>384</option><option value="512">512</option></select><label for="flow-views">虚拟视图</label><select id="flow-views"><option value="3">正面及两侧</option><option value="1">仅正面</option></select><label for="flow-iterations">迭代</label><input id="flow-iterations" type="number" min="1" max="5" value="2"><label for="flow-strength">强度</label><input id="flow-strength" type="number" min="1" max="100" value="50"><label for="flow-distance">每步位移 %</label><input id="flow-distance" type="number" min="0.1" max="10" step="0.1" value="3"></div>
+<p class="hint">自动生成共用正交视图，沿用对应点、排除区、软权重和防翻面。0% 权重顶点固定；位移按目标尺寸计。</p>
+<button id="flow-run" disabled>计算光流细化预览</button><div class="point-tools"><button id="flow-apply" disabled>采用纹理细化</button><button id="flow-cancel" disabled>取消预览</button></div>
+<p id="flow-info" class="hint" role="status">未进行纹理细化。预览采用前，原结果与烘焙贴图保留；采用后需重新烘焙。</p></section><section><div class="section-title"><span>09</span><h2>批处理与序列</h2></div>
+<div class="settings"><label for="batch-mode">约束模式</label><select id="batch-mode"><option value="sequence">同拓扑序列 · 复用当前点对</option><option value="independent">不同拓扑扫描 · 独立约束 JSON</option></select></div>
+<label class="file">选择多个目标 OBJ<input id="batch-files" type="file" accept=".obj" multiple><b>选择扫描 / 表情序列</b></label>
+<p id="batch-selection" class="hint">尚未选择扫描。</p>
+<label class="hint"><input id="batch-use-result" type="checkbox" disabled> 将当前贴合结果作为本批模板</label>
+<p class="hint">同拓扑模式核对顶点数量及面索引顺序；顶点编号仍须对应相同部位。不同拓扑扫描需先各自建立点对，再导出并加载约束 JSON。</p>
+<button id="batch-export-constraints" disabled>导出当前扫描约束 JSON</button><label class="file">加载一个或多个约束 JSON<input id="batch-constraints" type="file" accept=".json" multiple><b>选择独立扫描约束</b></label>
+<p id="batch-constraint-info" class="hint">约束按扫描文件名匹配，并核对模板拓扑。</p>
+<label class="hint"><input id="batch-temporal" type="checkbox"> 跨帧时序平滑 · 减少局部形变抖动</label>
+<div class="settings"><label for="temporal-mode">时序模式</label><select id="temporal-mode"><option value="causal">单向 · 参考上一帧</option><option value="bidirectional">双向 · 结合前后帧</option></select></div>
+<div class="settings"><label for="temporal-strength">平滑强度 %</label><input id="temporal-strength" type="number" min="1" max="90" value="35"><label for="temporal-distance">最大修正 %</label><input id="temporal-distance" type="number" min="0.1" max="5" step="0.1" value="1"></div>
+<label class="hint"><input id="temporal-adaptive" type="checkbox"> 自适应强度 · 快速表情减少平滑</label>
+<div class="settings"><label for="temporal-speed">速度阈值 % / 帧</label><input id="temporal-speed" type="number" min="0.1" max="10" step="0.1" value="1"></div>
+<label class="hint"><input id="temporal-anomalies" type="checkbox"> 检测异常帧 · 隔离噪声和贴合跳变</label>
+<div class="settings"><label for="anomaly-threshold">异常偏差阈值 %</label><input id="anomaly-threshold" type="number" min="0.1" max="20" step="0.1" value="2"></div>
+<label class="hint"><input id="temporal-repair" type="checkbox"> 修复异常帧并重新烘焙</label>
+<div class="settings"><label for="repair-max-gap">连续修复上限</label><input id="repair-max-gap" type="number" min="1" max="5" value="3"></div>
+<p class="hint">修复会自动开启检测和烘焙。使用前后原本正常的帧插值，再按本帧点对、固定区和软权重重新贴合；修复后重新检查，合格才烘焙。缺少前后参考、异常段过长或检查失败时继续隔离。原扫描及原异常缓存保留，修复不消除扫描本身的噪声或恢复缺失纹理。</p>
+<p class="hint">启用后先收集序列，再比较扫描粗糙度、离面误差和局部不连贯跳变。未修复的可疑帧保留已有几何和约束，跳过平滑/烘焙并切断历史；报告列出原因。边界、短片段或不同扫描拓扑可能上下文不足；检测不能可靠区分所有大幅噪声与真实运动，需复查。</p>
+<p class="hint">自适应时，上方强度作为上限。先补偿姿态，再按局部表情速度降低强度；达到阈值的区域停止平滑，保留快速峰值。阈值以目标尺寸百分比/相邻帧计，越低越早保护运动。大幅扫描噪声也可能被当作运动，仍需检查结果。</p>
+<p class="hint">用于连续、等间隔的同一人物序列，按文件名数字顺序处理。双向先收集贴合/光流结果，再结合相邻前后帧；片段首尾保留原几何，至少 3 帧才有可平滑的中间帧。先补偿姿态与尺度，保留本帧硬点、排除区、软权重和防翻面约束，最后烘焙。失败切断片段；强平滑可能削弱快速表情峰值，请为片段切换另建批次。</p>
+<p class="hint">双向收集阶段取消：完成已收集前缀的平滑/烘焙。平滑阶段取消：完成当前帧，剩余帧保留未平滑几何并跳过烘焙。</p>
+<label class="hint"><input id="batch-flow" type="checkbox"> 同一人物表情序列 · 逐帧光流细化并自动烘焙</label>
+<p id="batch-flow-info" class="hint">使用第 06 节加载的模板参考贴图；请先将左侧模型转到正面。共用第 08 节光流参数、当前左侧相机朝向和软权重；几何与光流独立求解，启用时序后再跨帧平滑。</p>
+<p class="hint">启用光流后自动开启烘焙。无法验证纹理改善的帧记为失败，保留几何并跳过烘焙，继续下一帧。遮挡、嘴内或光照差异仍需人工检查。</p>
+<label class="hint"><input id="batch-bake" type="checkbox"> 每项贴合后烘焙扫描纹理到模板 UV</label>
+<label class="file">选择扫描贴图 PNG / JPEG<input id="batch-textures" type="file" accept=".png,.jpg,.jpeg" multiple><b>选择多张扫描贴图</b></label>
+<p id="batch-texture-info" class="hint">未选择贴图。</p>
+<p class="hint">按主名匹配（scan01.obj → scan01.png），每个扫描一张贴图；同名多图视为歧义。共用第 06 节的分辨率、边缘扩展、投射距离及当前法线夹角。模板和扫描均需有效 UV；烘焙失败保留几何并继续。</p>
+<label class="hint"><input id="batch-auto-download" type="checkbox" checked> 完成后自动下载 ZIP（含部分成功结果）</label>
+<div class="point-tools"><button id="batch-start" class="primary" disabled>开始批处理</button><button id="batch-cancel" disabled>完成当前项后取消</button></div>
+<div class="point-tools"><button id="batch-download" disabled>下载结果 ZIP</button><button id="batch-refresh" disabled>重新查询任务</button></div><button id="batch-clear">清空所选队列</button>
+<p id="batch-info" class="hint" role="status">尚未启动批处理。</p><ol id="batch-items"></ol><p id="batch-output" class="hint"></p>
+<p class="hint">每批最多 50 项，单 OBJ ≤ 18 MB，单贴图 ≤ 8 MB / 16 百万像素，上传及未压缩输出各 ≤ 256 MB。按文件名数字顺序求解；勾选烘焙后导出各项 OBJ、MTL、PNG 和报告。建议启动前保存工程；关闭页面后后台继续，本地服务停止则中断。</p></section></aside>
+<div class="workspace">
+<div class="toolbar"><div><strong id="phase">准备模型</strong><span id="instruction">导入两个模型，或载入演示体验完整流程</span></div><div class="view-tools"><label><input id="show-textures" type="checkbox" checked> 纹理</label><label><input id="unlit-textures" type="checkbox" checked> 原色</label><label><input id="wire" type="checkbox"> 线框</label><label><input id="overlay" type="checkbox" disabled> 叠加目标</label><button id="fit">视图复位</button></div></div>
+<div class="viewports"><section class="viewport" id="source-view"><div class="view-label"><span class="source-dot">●</span> 模板 <span id="result-badge" hidden>贴合结果</span></div><div class="placeholder">导入模板模型<small>顶点与拓扑将保留</small></div></section><section class="viewport" id="target-view"><div class="view-label"><span class="target-dot">●</span> 目标</div><div class="placeholder">导入目标模型<small>选择与模板相同的部位</small></div></section></div>
+<div id="metrics" hidden></div>
+<div id="stage-results" hidden></div>
+<footer><span id="status" role="status" aria-live="polite">就绪</span><span>拖动旋转 · 滚轮缩放 · 右键平移 · Shift + 点击执行所选操作</span></footer>
+</div>
+</main>
+<dialog id="health-dialog" aria-labelledby="health-title">
+<div class="health-header"><h2 id="health-title">网格诊断</h2><button id="health-close">关闭</button></div>
+<p id="health-status" role="status"></p><div id="health-counts"></div>
+<div class="health-legend"><label><input id="health-show-nonmanifold" type="checkbox" checked> <span style="color:#ff5454">非流形边/点</span></label><label><input id="health-show-invalid" type="checkbox" checked> <span style="color:#ffbd61">无效面</span></label><label><input id="health-show-isolated" type="checkbox" checked> <span style="color:#61e1f0">孤立点</span></label><label><input id="health-show-winding" type="checkbox" checked> <span style="color:#d298ff">绕序冲突</span></label></div>
+<div id="health-viewport"></div><p class="hint">拖动旋转 · 滚轮缩放 · 右键平移。无有效坐标或索引的面无法定位，请看下方原文件行号。</p>
+<ol id="health-details"></ol>
+<p class="hint">修复策略：删除无效/重复面及孤立点，分离非流形连接，统一局部绕序。输出会三角化，分离处可能形成开放边界。</p>
+<p id="health-impact" class="hint"></p>
+<div class="health-actions"><button id="health-preview" disabled>生成修复预览</button><button id="health-original" disabled>查看原始</button><button id="health-download" disabled>下载修复 OBJ</button><button id="health-apply" class="primary" disabled>应用修复并清空约束</button></div>
+</dialog><script type="module" src="app.js"></script>
+</body></html>

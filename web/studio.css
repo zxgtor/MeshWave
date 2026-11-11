@@ -1,0 +1,31 @@
+/* Graphite Studio: neutral work surfaces, restrained steel-blue interaction. */
+:root{
+  --bg:#151619;--panel:#1d1f24;--line:#32363f;--text:#dce0e6;--muted:#9ca3ae;
+  --accent:#8ba4c0;--source:#a8afb9;--target:#7d8796;
+  --control:#282c33;--control-border:#3a404a;--control-hover:#323842;
+  --primary:#4f6581;--primary-hover:#5c7390;--primary-border:#6e86a4;--primary-text:#f3f6fb;
+  --danger:#ffada2;--warning:#d9bc86;
+}
+header,.toolbar{background:#191b1f}
+.brand strong span{color:var(--text)}
+.section-title>span{color:#8a929e}
+.file{background:#22252c;border-color:#363b44}
+.file:hover{background:var(--control);border-color:var(--accent)}
+button,select,input[type=number],.settings input[type=text]{background:var(--control);border-color:var(--control-border);color:var(--text)}
+button:hover:enabled{background:var(--control-hover)}
+button.primary{background:var(--primary);border-color:var(--primary-border);color:var(--primary-text)}
+button.primary:hover:enabled{background:var(--primary-hover)}
+.quiet{background:transparent;border-color:transparent;color:var(--muted)}
+.settings input,.settings select{background:#24272e}
+.viewport{background:var(--bg)}
+.view-label{background:#1d2026e8;border-color:#353a44}
+.marker{background:#c4cad3;color:#17191e;border-color:#59616d;box-shadow:0 1px 4px #0006}
+.marker.suggested{background:#a9bed4}
+.marker.editing{background:#f3f6fb;outline-color:var(--accent)}
+.brush-cursor{border-color:var(--accent)}
+#metrics{background:#22252c}
+#texture-preview{background:repeating-conic-gradient(#30343c 0% 25%,#202329 0% 50%) 0 0/16px 16px}
+#health-impact{color:var(--warning)}
+#status.error,#pairs li button:last-child{color:var(--danger)}
+#batch-items small{color:var(--muted)}
+#batch-items .batch-error{color:var(--danger)}
