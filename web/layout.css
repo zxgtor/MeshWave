@@ -1,5 +1,15 @@
 /* Let CSS own canvas dimensions; renderer buffers follow the viewport element. */
 .viewport>canvas{position:absolute;inset:0;width:100%;height:100%}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.language-control{flex-shrink:0}
+#language-select{max-width:100%;font-size:12px;padding:8px}
+html[lang=en] .settings{grid-template-columns:100px minmax(0,1fr)}
+html[lang=en] .settings label{overflow-wrap:anywhere}
+html[lang=en] .marker{width:max-content;min-width:22px;padding:0 4px;white-space:nowrap}
+.view-tools{flex-wrap:wrap;justify-content:flex-end}
+.toolbar>div:first-child{min-width:0}
+.toolbar #instruction{overflow-wrap:anywhere}
+@media(max-width:760px){.project-tools{flex-wrap:wrap}.language-control{flex:0 0 100%}.view-tools{justify-content:flex-start}header{flex-shrink:0}}
 
 @media(min-width:761px){
   html,body{height:100%;overflow:hidden}

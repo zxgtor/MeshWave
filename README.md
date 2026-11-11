@@ -19,6 +19,7 @@
 | 网格诊断 | 检测和高亮非流形边、无效面、孤立点及绕序问题，提供清理预览与导出 |
 | 批处理与时序 | 自动贴合、光流细化、烘焙和导出；单向、双向及自适应时序平滑，异常帧检测与插值修复 |
 | 工程保存 | 保存模型、纹理、约束、参数与当前结果，重新打开后继续编辑 |
+| 界面语言 | 中文 / English 即时切换，并记住当前浏览器的语言选择 |
 
 完整操作及各项限制见 [使用指南](docs/user-guide.md)。
 
@@ -141,6 +142,8 @@ python3 -m venv .venv
 
 ## 首次使用
 
+右上角的语言选择框可在 **中文 / English** 之间切换，无需刷新。默认中文，选择保存在当前浏览器；切换不会修改模型、点对、参数、当前结果或笔刷撤销记录。文件名和自定义曲线名保留原文。
+
 1. 点击 **载入演示**，无需自己的模型即可试用。演示是带 UV 和棋盘纹理的合成模型，已设置 7 对对应点，适合体验贴合、烘焙和导出；它不适合测试自动人脸检测。
 2. 使用自己的数据时，分别导入**模板 OBJ** 和**目标扫描 OBJ**。模板的顶点顺序、原始面和 UV 将保留到贴合结果。
 3. 按住 **Shift**，先点模板，再点目标的相同部位。至少建立 3 对不共线的对应点，建议覆盖整个待贴合区域。正面人脸可先生成自动建议，检查后再采用。
@@ -194,7 +197,7 @@ npm run vendor
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-node --test tests/brush.test.mjs
+node --test tests/brush.test.mjs tests/i18n.test.mjs
 ```
 
 Three.js 的 MIT 许可见 [THREE-LICENSE.txt](web/vendor/THREE-LICENSE.txt)。人脸模型来源见 [模型说明](models/README.md)。

@@ -19,12 +19,13 @@ A local 3D mesh fitting tool that wraps a template onto a scan while preserving 
 | Mesh diagnostics | Highlight non-manifold edges, invalid faces, isolated vertices, and winding issues; preview and export cleaned meshes |
 | Batches and sequences | Automated fitting, optical flow refinement, baking, and export; forward, bidirectional, and adaptive temporal smoothing; anomaly detection and interpolation-based frame repair |
 | Project files | Save meshes, textures, constraints, settings, and the current result, then reopen them to continue editing |
+| Interface language | Switch instantly between Chinese and English; your choice is remembered in the current browser |
 
 For detailed controls and limitations, see the [user guide (Chinese)](docs/user-guide.md).
 
 ## Screenshots
 
-These screenshots show the running Graphite Studio interface using the built-in synthetic demo meshes and checkerboard texture. They illustrate the workflow, not fitting accuracy on real face scans. The application interface is currently in Chinese; this English README includes the relevant Chinese button labels to help you navigate it.
+These screenshots show the Chinese version of the running Graphite Studio interface using the built-in synthetic demo meshes and checkerboard texture. They illustrate the workflow, not fitting accuracy on real face scans. The app supports both Chinese and English; use the language selector in the top-right corner to switch.
 
 ### Point correspondences
 
@@ -141,6 +142,8 @@ python3 -m venv .venv
 
 ## First run
 
+Use the **中文 / English** selector in the top-right corner to switch languages without reloading. Chinese is the default; your choice is saved in the current browser. Switching does not change meshes, correspondences, settings, results, or brush undo history. Filenames and custom curve names retain their original spelling.
+
 1. Click **载入演示 (Load demo)** to try the app without your own files. The synthetic demo includes UVs, a checkerboard scan texture, and seven preset point pairs. Use it to try fitting, baking, and export; it is not a face detection test.
 2. For your own data, import a **template OBJ** and a **target scan OBJ**. The fitted result retains the template's vertex order, original faces, and UVs.
 3. Hold **Shift**, click a point on the template, then click the corresponding location on the target. Set at least three non-collinear pairs, preferably spread across the fitting region. For frontal faces, you can generate automatic suggestions and review them before accepting.
@@ -194,7 +197,7 @@ Run the existing tests:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-node --test tests/brush.test.mjs
+node --test tests/brush.test.mjs tests/i18n.test.mjs
 ```
 
 The Three.js MIT license is included in [THREE-LICENSE.txt](web/vendor/THREE-LICENSE.txt). See the [model notes](models/README.md) for the face landmark model source.

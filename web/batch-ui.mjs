@@ -1,3 +1,4 @@
+import {setText,appendText,setLabel,preserveName} from './i18n.mjs';
 // A batch owns its input snapshot; this controller never replaces the working meshes.
 const $=id=>document.getElementById(id);
 const terminal=new Set(['completed','completed_with_errors','cancelled','interrupted','failed','limited']);
@@ -8,7 +9,7 @@ export class BatchUI {
     this.id=this.remember('facewrap-batch-job');
     $('batch-files').onchange=e=>this.chooseFiles(e);
     this.textures=[];
-    $('batch-textures').onchange=e=>{const files=[...e.target.files];if(files.length>100){this.error='一次最多选择 100 张贴图。';e.target.value='';this.render();return;}this.textures=files;$('batch-texture-info').textContent=`已选择 ${files.length} 张贴图，按扫描主名匹配。`;this.error='';this.update(false);};
+    $('batch-textures').onchange=e=>{const files=[...e.target.files];if(files.length>100){this.error='一次最多选择 100 张贴图。';e.target.value='';this.render();return;}this.textures=files;setText($('batch-texture-info'),`已选择 ${files.length} 张贴图，按扫描主名匹配。`);this.error='';this.update(false);};
     $('batch-bake').onchange=()=>this.update(false);
     $('batch-flow').onchange=()=>{if($('batch-flow').checked)$('batch-bake').checked=true;this.update(false);};
     $('batch-temporal').onchange=()=>this.update(false);
@@ -18,8 +19,8 @@ export class BatchUI {
     $('batch-constraints').onchange=e=>this.chooseConstraints(e);
     $('batch-mode').onchange=()=>this.update(false);
     $('batch-start').onclick=()=>this.start();$('batch-cancel').onclick=()=>this.cancel();$('batch-download').onclick=()=>this.downloadZip();$('batch-refresh').onclick=()=>this.resume();
-    $('batch-clear').onclick=async()=>{if(this.report?.status==='draft'){try{await this.api('batch-cancel',{jobId:this.id});}catch(error){this.error=error.message;this.render();return;}}this.files=[];this.textures=[];$('batch-textures').value='';$('batch-texture-info').textContent='未选择贴图。';this.constraints=null;this.selectionChanged=false;this.report=null;this.id=null;this.remember('facewrap-batch-job','');this.remember('facewrap-batch-auto','');$('batch-files').value='';$('batch-constraints').value='';$('batch-constraint-info').textContent='约束按扫描文件名匹配，并核对模板拓扑。';this.error='';this.update(false);};
-    $('batch-export-constraints').onclick=async()=>{try{const data=await this.getConstraints();this.download(JSON.stringify(data,null,2),'batch-constraints.json');$('batch-constraint-info').textContent=`已导出 ${data.items[0].name} 的点对与目标排除区。`;}catch(error){this.error=error.message;this.render();}};
+    $('batch-clear').onclick=async()=>{if(this.report?.status==='draft'){try{await this.api('batch-cancel',{jobId:this.id});}catch(error){this.error=error.message;this.render();return;}}this.files=[];this.textures=[];$('batch-textures').value='';setText($('batch-texture-info'),'未选择贴图。');this.constraints=null;this.selectionChanged=false;this.report=null;this.id=null;this.remember('facewrap-batch-job','');this.remember('facewrap-batch-auto','');$('batch-files').value='';$('batch-constraints').value='';setText($('batch-constraint-info'),'约束按扫描文件名匹配，并核对模板拓扑。');this.error='';this.update(false);};
+    $('batch-export-constraints').onclick=async()=>{try{const data=await this.getConstraints();this.download(JSON.stringify(data,null,2),'batch-constraints.json');setText($('batch-constraint-info'),`已导出 ${data.items[0].name} 的点对与目标排除区。`);}catch(error){this.error=error.message;this.render();}};
   }
   remember(key,value){try{if(value===undefined)return localStorage.getItem(key);if(value)localStorage.setItem(key,value);else localStorage.removeItem(key);}catch{}return null;}
   lockWorkspace(){if(!this.ownsBusy){this.ownsBusy=true;this.setBusy(true);}}
@@ -40,7 +41,7 @@ export class BatchUI {
         merged||={format:value.format,version:1,templateTopologyHash:value.templateTopologyHash,items:[]};
         for(const item of value.items){if(typeof item.name!=='string'||names.has(item.name.toLowerCase()))throw Error('约束中存在无效或重复文件名。');names.add(item.name.toLowerCase());merged.items.push(item);}
       }
-      if(!merged||merged.items.length>50)throw Error('约束 JSON 合计需要 1–50 项。');this.constraints=merged;this.error='';$('batch-constraint-info').textContent=`已加载 ${merged.items.length} 项独立扫描约束。`;
+      if(!merged||merged.items.length>50)throw Error('约束 JSON 合计需要 1–50 项。');this.constraints=merged;this.error='';setText($('batch-constraint-info'),`已加载 ${merged.items.length} 项独立扫描约束。`);
     }catch(error){this.error=`约束加载失败：${error.message}；原约束保留。`;}
     this.loadingConstraints=false;e.target.value='';this.update(false);
   }
@@ -55,12 +56,12 @@ export class BatchUI {
     $('batch-use-result').disabled=locked||!r.result;if(!r.result)$('batch-use-result').checked=false;
     const independent=$('batch-mode').value==='independent';
     $('batch-start').disabled=locked||!r.source||!this.files.length||(flow&&!r.flowReady)||(independent?!this.constraints:!r.target||!r.paired);
-    $('batch-flow-info').textContent=`${flow&&!r.flowReady?'请先在第 06 节给模板加载原始参考贴图并确保完整 UV。':'使用第 06 节模板原始参考贴图。'}请先将左侧模型转到正面；共用第 08 节光流参数、当前左侧相机朝向和软权重。几何与光流独立求解；勾选时序后再跨帧平滑。`;
+    setText($('batch-flow-info'),`${flow&&!r.flowReady?'请先在第 06 节给模板加载原始参考贴图并确保完整 UV。':'使用第 06 节模板原始参考贴图。'}请先将左侧模型转到正面；共用第 08 节光流参数、当前左侧相机朝向和软权重。几何与光流独立求解；勾选时序后再跨帧平滑。`);
     $('batch-export-constraints').disabled=locked||!r.source||!r.target||!r.paired;
     $('batch-cancel').disabled=(external&&!this.ownsBusy)||!(this.active||this.report?.status==='draft')||this.report?.status==='packaging'||this.cancelRequested;
     $('batch-download').disabled=this.downloading||!this.report?.archiveReady;
     $('batch-refresh').disabled=(external&&!this.ownsBusy)||!this.id||this.uploading||this.polling;
-    $('batch-selection').textContent=`已选择 ${this.files.length} 个扫描；${independent?'每项使用其独立约束':'复用当前已采用点对及排除区'}。`;
+    setText($('batch-selection'),`已选择 ${this.files.length} 个扫描；${independent?'每项使用其独立约束':'复用当前已采用点对及排除区'}。`);
     this.render();
   }
   render(){
@@ -70,11 +71,11 @@ export class BatchUI {
     else if(report){const c=report.counts;info=`${labels[report.status]||report.status} · 成功 ${c.succeeded} · 失败 ${c.failed} · 跳过 ${c.skipped} · 等待 ${c.pending}${c.prepared?' · 待序列处理 '+c.prepared:''}${c.running?' · 当前项计算中':''}`;}
     if(this.selectionChanged&&!this.active)info=`新队列待启动 · ${this.files.length} 项${report?.archiveReady?'；上次结果仍可下载。':'。'}`;
     if(report?.error)info+=' '+report.error;
-    if(this.error)info+=' '+this.error;$('batch-info').textContent=info;
-    $('batch-output').textContent=report?.outputPath?`结果目录：${report.outputPath}`:'';
+    if(this.error)info+=' '+this.error;setText($('batch-info'),info);
+    setText($('batch-output'),report?.outputPath?`结果目录：${preserveName(report.outputPath)}`:'');
     const list=$('batch-items');list.replaceChildren();
     const items=!this.selectionChanged&&report?.items.length?report.items:this.files.map(f=>({name:f.name,status:'pending'}));
-    for(const item of items){const li=document.createElement('li'),name=document.createElement('span'),state=document.createElement('b');name.textContent=item.name;name.title=item.name;state.textContent=item.stage==='repair'?'异常修复中':item.stage==='anomaly'?'异常检测中':item.stage==='temporal'?'时序平滑中':item.stage==='flow'?'光流细化中':item.stage==='baking'?'正在烘焙':labels[item.status]||item.status;li.append(name,state);if(item.repairStatus){const detail=document.createElement('small');detail.textContent=({running:'正在插值和受约束重新贴合',succeeded:'异常几何修复成功',failed:'修复失败，继续隔离',unavailable:'无可用修复区间',skipped:'修复已取消',interrupted:'修复已中断'})[item.repairStatus]||item.repairStatus;if(item.repairStats)detail.textContent+=` · ${item.repairStats.beforeFrame} → ${item.repairStats.afterFrame} · 插值 ${(item.repairStats.fraction*100).toFixed(0)}%`;if(item.repairError){detail.classList.add('batch-error');detail.textContent+=' · '+item.repairError;}li.append(detail);}if(item.anomalyStatus){const detail=document.createElement('small');detail.textContent=({pending:'待异常检测',rejected:'可疑异常 · 已隔离',repaired:'几何已修复 · 原扫描异常保留',clear:'未发现异常信号',limited:'上下文不足 · 已检查可用信号',failed:'异常检测失败',interrupted:'异常检测中断',skipped:'未完成异常检测'})[item.anomalyStatus]||item.anomalyStatus;if(item.anomalyStats){const a=item.anomalyStats;detail.textContent+=` · 扫描粗糙度 ${a.scanRoughnessPercent?.toFixed(2)??'—'}% · 离面误差 ${a.fitDistancePercent?.toFixed(2)??'—'}%`;}li.append(detail);}if(item.flowStats){const detail=document.createElement('small');detail.textContent=`光流残差 ${item.flowStats.beforePhotoError.toFixed(2)} → ${item.flowStats.afterPhotoError.toFixed(2)} · ${item.flowStats.matchedVertices} 个匹配顶点`;li.append(detail);}if(item.temporalStats){const detail=document.createElement('small');detail.textContent=item.temporalStats.seed?(item.temporalStats.mode==='bidirectional'?'双向片段边界 · 保留本帧几何':'时序历史起点 · 保留本帧几何'):`时序平滑 · ${item.temporalStats.changedVertices} 个顶点 · 最大修正 ${item.temporalStats.maxCorrection.toPrecision(3)} · 前帧 ${item.previousFrame}${item.nextFrame?' · 后帧 '+item.nextFrame:''}`;li.append(detail);if(item.temporalStats.adaptive&&!item.temporalStats.seed){const adaptive=document.createElement('small');adaptive.textContent=`自适应强度 ${item.temporalStats.effectiveStrengthMean.toFixed(1)}%（均值） · 速度 ${item.temporalStats.speedMaxPercent.toFixed(2)}%/帧（最大） · 快速保护 ${item.temporalStats.fastVertices} 顶点`;li.append(adaptive);}}if(item.bakeStats){const detail=document.createElement('small');detail.textContent=`已烘焙 ${item.bakeStats.resolution}² · 覆盖 ${(item.bakeStats.coverage*100).toFixed(1)}% · 未匹配 ${item.bakeStats.unmatchedPixels} 像素`;li.append(detail);}if(item.error){const detail=document.createElement('small');detail.className='batch-error';detail.textContent=item.error;li.append(detail);}list.append(li);}
+    for(const item of items){const li=document.createElement('li'),name=document.createElement('span'),state=document.createElement('b');setText(name,item.name,true);setLabel(name,'title',item.name,true);setText(state,item.stage==='repair'?'异常修复中':item.stage==='anomaly'?'异常检测中':item.stage==='temporal'?'时序平滑中':item.stage==='flow'?'光流细化中':item.stage==='baking'?'正在烘焙':labels[item.status]||item.status);li.append(name,state);if(item.repairStatus){const detail=document.createElement('small');setText(detail,({running:'正在插值和受约束重新贴合',succeeded:'异常几何修复成功',failed:'修复失败，继续隔离',unavailable:'无可用修复区间',skipped:'修复已取消',interrupted:'修复已中断'})[item.repairStatus]||item.repairStatus);if(item.repairStats)appendText(detail,` · ${item.repairStats.beforeFrame} → ${item.repairStats.afterFrame} · 插值 ${(item.repairStats.fraction*100).toFixed(0)}%`);if(item.repairError){detail.classList.add('batch-error');appendText(detail,' · '+item.repairError);}li.append(detail);}if(item.anomalyStatus){const detail=document.createElement('small');setText(detail,({pending:'待异常检测',rejected:'可疑异常 · 已隔离',repaired:'几何已修复 · 原扫描异常保留',clear:'未发现异常信号',limited:'上下文不足 · 已检查可用信号',failed:'异常检测失败',interrupted:'异常检测中断',skipped:'未完成异常检测'})[item.anomalyStatus]||item.anomalyStatus);if(item.anomalyStats){const a=item.anomalyStats;appendText(detail,` · 扫描粗糙度 ${a.scanRoughnessPercent?.toFixed(2)??'—'}% · 离面误差 ${a.fitDistancePercent?.toFixed(2)??'—'}%`);}li.append(detail);}if(item.flowStats){const detail=document.createElement('small');setText(detail,`光流残差 ${item.flowStats.beforePhotoError.toFixed(2)} → ${item.flowStats.afterPhotoError.toFixed(2)} · ${item.flowStats.matchedVertices} 个匹配顶点`);li.append(detail);}if(item.temporalStats){const detail=document.createElement('small');setText(detail,item.temporalStats.seed?(item.temporalStats.mode==='bidirectional'?'双向片段边界 · 保留本帧几何':'时序历史起点 · 保留本帧几何'):`时序平滑 · ${item.temporalStats.changedVertices} 个顶点 · 最大修正 ${item.temporalStats.maxCorrection.toPrecision(3)} · 前帧 ${item.previousFrame}${item.nextFrame?' · 后帧 '+item.nextFrame:''}`);li.append(detail);if(item.temporalStats.adaptive&&!item.temporalStats.seed){const adaptive=document.createElement('small');setText(adaptive,`自适应强度 ${item.temporalStats.effectiveStrengthMean.toFixed(1)}%（均值） · 速度 ${item.temporalStats.speedMaxPercent.toFixed(2)}%/帧（最大） · 快速保护 ${item.temporalStats.fastVertices} 顶点`);li.append(adaptive);}}if(item.bakeStats){const detail=document.createElement('small');setText(detail,`已烘焙 ${item.bakeStats.resolution}² · 覆盖 ${(item.bakeStats.coverage*100).toFixed(1)}% · 未匹配 ${item.bakeStats.unmatchedPixels} 像素`);li.append(detail);}if(item.error){const detail=document.createElement('small');detail.className='batch-error';setText(detail,item.error);li.append(detail);}list.append(li);}
   }
   async start(){
     if(this.active)return;
