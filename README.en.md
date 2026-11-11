@@ -12,7 +12,7 @@ A local 3D mesh fitting tool that wraps a template onto a scan while preserving 
 | --- | --- |
 | Mesh fitting | Single-stage or coarse-to-fine solving, exact triangle-surface distances, normal filtering, and local triangle flip prevention |
 | Fit quality inspection | Error heatmap, adjustable threshold, global/local mean, RMS, P95, maximum error, and normal issue counts |
-| Points and curves | Add, edit, or delete point pairs; suggest landmarks from frontal face views; generate correspondences from paired curves |
+| Points and curves | Continuous surface or vertex pairs with editing; frontal face landmark suggestions; arc-length sampling of cubic surface splines |
 | Region protection | Fixed template regions, excluded target regions, soft masks, and vertex influence painting |
 | Brush corrections | Push, pull, smooth, project onto the scan, and smooth along its surface, with brush undo and redo |
 | Textures | Preview textures, bake scan colors into template UVs, and export PNGs or textured mesh ZIPs |
@@ -152,6 +152,8 @@ Use the **中文 / English** selector in the top-right corner to switch language
 5. Export an OBJ directly. For textures, load the scan image, bake it into the template UVs, then export a PNG or textured mesh ZIP.
 6. Click **保存工程 (Save project)** to download a `.facewrap.json` file. Use **打开工程 (Open project)** to resume later. Projects are not saved automatically.
 
+The default **Surface Point** placement stores continuous positions inside triangles and enforces barycentric equalities in single-stage and multi-stage fitting. **Snap to Vertex** remains available. New curves use interpolating cubic splines projected onto the mesh, then sampled by arc length; match the starting points and direction on both sides. Legacy vertex pairs and mesh polylines remain compatible. Projects containing new constraints use version 2. Brushes, optical flow, and temporal processing conservatively lock the supporting vertices of surface points to preserve their constraints.
+
 In normal navigation, drag with the left mouse button to rotate, use the wheel to zoom, and drag with the right button to pan. In brush mode, use **Alt + left drag** to rotate. See the [user guide (Chinese)](docs/user-guide.md) for additional shortcuts and constraint rules.
 
 After fitting, click **Compute / Refresh Errors** in section 04 to show the heatmap. Enable **Local Inspection** and Shift-click an eye, lip, or another region on the left mesh, or choose **Locate Maximum Error**. Blue → yellow → red indicates increasing distance; red reaches the selected threshold. Optionally highlight normal issues in purple. Distances use OBJ units; thresholds and radii are percentages of target size. Inspection preserves project data and undo history. Recompute after geometry edits. Small surface distances do not prove anatomical correspondence; self-intersections are not checked.
@@ -200,7 +202,7 @@ Run the existing tests:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-node --test tests/brush.test.mjs tests/i18n.test.mjs tests/fit-quality.test.mjs
+node --test tests/brush.test.mjs tests/i18n.test.mjs tests/fit-quality.test.mjs tests/surface-points.test.mjs
 ```
 
 The Three.js MIT license is included in [THREE-LICENSE.txt](web/vendor/THREE-LICENSE.txt). See the [model notes](models/README.md) for the face landmark model source.

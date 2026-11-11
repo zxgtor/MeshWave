@@ -1,8 +1,9 @@
-"""Paired surface polylines: mesh-edge paths and arc-length vertex sampling."""
+"""Cubic surface splines and backward-compatible mesh-edge polylines."""
 import numpy as np
 from scipy import sparse
 from scipy.sparse.csgraph import dijkstra
 from wrap_core import parse_obj, index_list, exclusion_masks, MAX_SOURCE
+from point_constraints import validate_pairs,point_key
 
 
 def validate_curves(value, meshes, excluded):
@@ -16,11 +17,18 @@ def validate_curves(value, meshes, excluded):
         if type(count) is not int or not 2<=count<=30 or type(closed) is not bool or (closed and count<3):
             raise ValueError('曲线采样数为 2–30；闭合曲线至少 3 点。')
         item={'name':curve['name'].strip(),'count':count,'closed':closed}
+        spline=curve.get('type','polyline')=='spline'
+        if curve.get('type','polyline') not in ('polyline','spline'):raise ValueError('曲线类型无效。')
+        if spline:item['type']='spline'
         for side in ['source','target']:
             vertices,faces=meshes[side]
             ids=curve.get(side,[])
             if not isinstance(ids,list) or len(ids)>32:
                 raise ValueError('每侧曲线最多 32 个控制节点。')
+            if spline:
+                mesh={key:(vertices,faces) for key in ['source','target']}
+                checked=validate_pairs([[p,p] for p in ids],mesh,0,{key:excluded.get(side,[]) for key in mesh})
+                item[side]=[p[0] for p in checked];continue
             index_list(ids,len(vertices),'曲线控制节点')
             item[side]=list(ids)
             if len(set(ids))!=len(ids):
@@ -78,27 +86,32 @@ def generate_curve_pairs(body):
     pairs=body.get('pairs',[])
     if not isinstance(pairs,list) or len(pairs)>100 or any(not isinstance(p,list) or len(p)!=2 for p in pairs):
         raise ValueError('现有对应点格式无效。')
-    for column,side in enumerate(['source','target']):
-        ids=[p[column] for p in pairs];index_list(ids,len(meshes[side][0]),'对应点')
-        if len(ids)!=len(set(ids)):raise ValueError('现有对应点重复。')
+    pairs=validate_pairs(pairs,meshes)
     masks=exclusion_masks(meshes['source'][1],meshes['target'][1],body.get('excludedFaces',{}),pairs)
     excluded={side:masks[side][0].tolist() for side in meshes}
     curves=validate_curves(body.get('curves',[]),meshes,excluded)
     path_only=body.get('pathOnly',False)
     if type(path_only) is not bool:raise ValueError('曲线路径模式无效。')
-    graphs={side:surface_graph(*meshes[side],excluded[side]) for side in meshes}
-    paths=[];generated=[];left=dict(pairs);right={b:a for a,b in pairs}
+    graphs={side:surface_graph(*meshes[side],excluded[side]) for side in meshes} if any(c.get('type')!='spline' for c in curves) else {}
+    paths=[];generated=[]
+    left={point_key(a,meshes['source'][1]):point_key(b,meshes['target'][1]) for a,b in pairs}
+    right={b:a for a,b in left.items()}
     for curve in curves:
-        item={side:trace_path(graphs[side],curve[side],curve['closed'] and len(curve[side])>=3) for side in meshes}
+        if curve.get('type')=='spline':
+            from surface_splines import projected_spline
+            results={side:projected_spline(*meshes[side],curve[side],curve['count'],curve['closed'],excluded[side],path_only) for side in meshes}
+            item={side:results[side][0] for side in meshes}
+        else:item={side:trace_path(graphs[side],curve[side],curve['closed'] and len(curve[side])>=3) for side in meshes}
         paths.append(item)
         if path_only:continue
         if any(len(curve[side])<(3 if curve['closed'] else 2) for side in meshes):
             raise ValueError(f'“{curve["name"]}”两侧控制节点不足。')
-        samples=[sample_path(meshes[side][0],item[side],curve['count'],curve['closed']) for side in ['source','target']]
+        samples=[results[side][1] if curve.get('type')=='spline' else sample_path(meshes[side][0],item[side],curve['count'],curve['closed']) for side in ['source','target']]
         for a,b in zip(*samples):
-            if (a in left and left[a]!=b) or (b in right and right[b]!=a):
+            ka,kb=point_key(a,meshes['source'][1]),point_key(b,meshes['target'][1])
+            if (ka in left and left[ka]!=kb) or (kb in right and right[kb]!=ka):
                 raise ValueError('曲线采样与已有点对或其他曲线冲突，请检查方向、节点顺序或减少采样数。')
-            if a in left:continue
-            left[a]=b;right[b]=a;generated.append([a,b])
+            if ka in left:continue
+            left[ka]=kb;right[kb]=ka;generated.append([a,b])
     if len(left)>100:raise ValueError('合并后超过 100 对对应点，请减少采样数或曲线数量。')
     return {'paths':paths,'pairs':generated}

@@ -5,11 +5,12 @@ from texture import normalize_texture
 from brush_support import brush_settings
 from curves import validate_curves
 from flow_settings import flow_settings
+from point_constraints import validate_pairs,handle_shape,point_key,support
 
 
 def validate_project(project):
-    if not isinstance(project, dict) or project.get('format') != 'facewrap-lite' or type(project.get('version')) is not int or project['version'] != 1:
-        raise ValueError('不是支持的 Mesh Wave 工程文件（版本 1）。')
+    if not isinstance(project, dict) or project.get('format') != 'facewrap-lite' or type(project.get('version')) is not int or project['version'] not in (1,2):
+        raise ValueError('不是支持的 Mesh Wave 工程文件（版本 1 或 2）。')
     models = project.get('models')
     if not isinstance(models, dict):
         raise ValueError('工程缺少模型信息。')
@@ -43,11 +44,7 @@ def validate_project(project):
     pairs = project.get('pairs', [])
     if not isinstance(pairs, list) or len(pairs) > 100 or any(not isinstance(p, list) or len(p) != 2 for p in pairs):
         raise ValueError('工程点对格式无效。')
-    for column, side in enumerate(['source', 'target']):
-        ids = [p[column] for p in pairs]
-        index_list(ids, len(meshes[side][0]), '对应点')
-        if len(ids) != len(set(ids)):
-            raise ValueError('工程包含重复对应点。')
+    pairs=validate_pairs(pairs,meshes)
     excluded = project.get('excludedFaces', {})
     if not isinstance(excluded, dict):
         raise ValueError('工程排除区域格式无效。')
@@ -59,13 +56,17 @@ def validate_project(project):
         exclusion_masks(meshes['source'][1], meshes['target'][1], normalized_excluded, pairs)
     curves=validate_curves(project.get('curves',[]),meshes,normalized_excluded)
     curve_pairs=project.get('curvePairs',[])
-    if not isinstance(curve_pairs,list) or len(curve_pairs)>100 or any(not isinstance(p,list) or len(p)!=2 or any(type(i) is not int for i in p) or p not in pairs for p in curve_pairs):
+    curve_pairs=validate_pairs(curve_pairs,meshes)
+    key=lambda p:(point_key(p[0],meshes['source'][1]),point_key(p[1],meshes['target'][1]))
+    pair_lookup={key(p):p for p in pairs}
+    if any(key(p) not in pair_lookup for p in curve_pairs):
         raise ValueError('曲线生成点记录与现有点对不一致。')
+    curve_pairs=[pair_lookup[key(p)] for p in curve_pairs]
     pending = project.get('pending')
     if pending is not None:
-        index_list([pending], len(meshes['source'][0]), '待配对点')
+        pending=handle_shape(pending,len(meshes['source'][0]),meshes['source'][1])
         masked = np.unique(meshes['source'][1][normalized_excluded['source']])
-        if pending in [p[0] for p in pairs] or pending in masked:
+        if any(point_key(pending,meshes['source'][1])==point_key(p[0],meshes['source'][1]) for p in pairs) or np.intersect1d(support(pending,meshes['source'][1]),masked).size:
             raise ValueError('待配对点与现有点对或排除区域冲突。')
     settings = project.get('settings', {})
     if not isinstance(settings, dict):

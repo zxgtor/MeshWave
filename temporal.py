@@ -3,6 +3,7 @@ import numpy as np
 from brush_support import prepare_brush
 from surface import TriangleSurface, FlipGuard, vertex_normals
 from wrap_core import parse_obj, similarity, exclusion_masks
+from point_constraints import positions
 
 
 def temporal_settings(value):
@@ -44,18 +45,18 @@ def smooth_frame(body,previous=None,following=None):
     previous=np.asarray(previous,float)
     if previous.shape!=current.shape or not np.isfinite(previous).all():raise ValueError('上一帧模板顶点无效。')
     # Align the previous output to this frame; global pose/scale should not trail behind.
-    anchors=np.asarray(body['pairs'],int)[:,0]
-    rotation,scale,a,b=similarity(previous[anchors],current[anchors]);aligned=(previous-a)@rotation*scale+b
+    anchors=[p[0] for p in body['pairs']];sample=lambda v:positions(v,faces,anchors)
+    rotation,scale,a,b=similarity(sample(previous),sample(current));aligned=(previous-a)@rotation*scale+b
     motion_aligned=aligned
     if settings['adaptive'] and not bidirectional and body.get('motionPrevious') is not None:
         motion_previous=np.asarray(body['motionPrevious'],float)
         if motion_previous.shape!=current.shape or not np.isfinite(motion_previous).all():raise ValueError('上一帧速度参考无效。')
-        rotation,scale,a,b=similarity(motion_previous[anchors],current[anchors]);motion_aligned=(motion_previous-a)@rotation*scale+b
+        rotation,scale,a,b=similarity(sample(motion_previous),sample(current));motion_aligned=(motion_previous-a)@rotation*scale+b
     motions=[motion_aligned-current]
     if bidirectional:
         following=np.asarray(following,float)
         if following.shape!=current.shape or not np.isfinite(following).all():raise ValueError('下一帧模板顶点无效。')
-        rotation,scale,a,b=similarity(following[anchors],current[anchors]);next_aligned=(following-a)@rotation*scale+b;motions.append(next_aligned-current);aligned=(aligned+next_aligned)/2
+        rotation,scale,a,b=similarity(sample(following),sample(current));next_aligned=(following-a)@rotation*scale+b;motions.append(next_aligned-current);aligned=(aligned+next_aligned)/2
     strength=np.full(len(current),settings['strength'],dtype=float)
     if settings['adaptive']:
         speed=np.maximum.reduce([np.linalg.norm(coherent_motion(motion,faces),axis=1) for motion in motions])/unit*100

@@ -2,6 +2,17 @@ export default `
 扫描尺寸无效，无法检测异常。	Invalid scan dimensions for anomaly detection.
 质量检查的结果顶点无效或模板过大。	Invalid result vertices or template too large for quality inspection.
 质量检查的表面距离无效。	Invalid surface distances in quality inspection.
+表面点必须包含三角面编号和三个重心坐标。	Surface points must contain a triangle index and three barycentric coordinates.
+表面点三角面编号无效。	Invalid surface point triangle index.
+表面点重心坐标必须非负且总和为 1。	Surface point barycentric coordinates must be nonnegative and sum to 1.
+表面点不能位于退化三角面。	Surface points cannot lie on degenerate triangles.
+表面对应约束相互冲突，或与固定区不兼容；请调整点或减少采样数。	Surface constraints conflict with each other or fixed regions. Adjust points or reduce samples.
+曲线类型无效。	Invalid curve type.
+曲线控制点位置重合，请调整节点。	Curve control positions coincide. Adjust the controls.
+样条偏离可用表面，请增加控制点或调整曲线。	Spline deviates from the usable surface. Add controls or adjust the curve.
+样条投射出现表面跳变，请增加控制点并检查曲线走向。	Spline projection jumps between surfaces. Add controls and check the path.
+样条采样位置重复，请调整控制点或减少采样数。	Spline samples repeat. Adjust controls or reduce the sample count.
+不是支持的 Mesh Wave 工程文件（版本 1 或 2）。	Not a supported Mesh Wave project file (version 1 or 2).
 待检测的贴合顶点无效。	Invalid fitted vertices for detection.
 扫描尺寸无效，无法检测贴合质量。	Invalid scan dimensions for fit quality checks.
 异常检测邻帧顶点无效。	Invalid neighboring frame vertices for anomaly detection.

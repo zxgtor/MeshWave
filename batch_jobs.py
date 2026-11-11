@@ -12,6 +12,7 @@ import zipfile
 from pathlib import Path
 import numpy as np
 from wrap_core import mesh_data,parse_obj,wrap,export_obj,index_list,exclusion_masks,MAX_SOURCE
+from point_constraints import handle_shape,surface_pairs,validate_pairs
 from texture import read_texture, bake_texture, texture_bundle
 from optical_flow import refine_texture, cameras, cv_module
 from flow_settings import flow_settings
@@ -52,14 +53,15 @@ def geometry_settings(value):
 def pairs_valid(pairs,source_count,target_count):
     if not isinstance(pairs,list) or not 3<=len(pairs)<=100 or any(not isinstance(p,list) or len(p)!=2 for p in pairs):raise ValueError('每项需要 3–100 对对应点。')
     for column,limit in [(0,source_count),(1,target_count)]:
-        ids=[p[column] for p in pairs];index_list(ids,limit,'批处理对应点')
-        if len(set(ids))!=len(ids):raise ValueError('批处理对应点存在重复索引。')
+        ids=[handle_shape(p[column],limit) for p in pairs]
+        keys=[json.dumps(i,sort_keys=True) for i in ids]
+        if len(set(keys))!=len(keys):raise ValueError('批处理对应点存在重复索引。')
 
 
 def constraints_manifest(body):
-    source,sf=parse_obj(body['source']);target,tf=parse_obj(body['target']);pairs=body['pairs'];pairs_valid(pairs,len(source),len(target))
+    source,sf=parse_obj(body['source']);target,tf=parse_obj(body['target']);pairs=validate_pairs(body['pairs'],{'source':(source,sf),'target':(target,tf)},3)
     masks=exclusion_masks(sf,tf,body.get('excludedFaces',{}),pairs)
-    return {'format':'facewrap-batch-constraints','version':1,'templateTopologyHash':topology_hash(source,sf),
+    return {'format':'facewrap-batch-constraints','version':2 if surface_pairs(pairs) else 1,'templateTopologyHash':topology_hash(source,sf),
             'items':[{'name':filename(body['name']),'pairs':pairs,'excludedTargetFaces':masks['target'][0].tolist()}]}
 
 
@@ -144,7 +146,7 @@ class BatchManager:
             config.update(referenceTopologyHash=topology_hash(target,tf),pairs=pairs,excludedTargetFaces=target_excluded)
         elif mode=='independent':
             manifest=body.get('constraints',{})
-            if not isinstance(manifest,dict) or manifest.get('format')!='facewrap-batch-constraints' or type(manifest.get('version')) is not int or manifest['version']!=1 or manifest.get('templateTopologyHash')!=signature:raise ValueError('扫描约束 JSON 与当前模板拓扑不匹配。')
+            if not isinstance(manifest,dict) or manifest.get('format')!='facewrap-batch-constraints' or type(manifest.get('version')) is not int or manifest['version'] not in (1,2) or manifest.get('templateTopologyHash')!=signature:raise ValueError('扫描约束 JSON 与当前模板拓扑不匹配。')
             items=manifest.get('items')
             if not isinstance(items,list) or not 1<=len(items)<=MAX_ITEMS:raise ValueError('扫描约束 JSON 需要 1–50 项。')
             for item in items:

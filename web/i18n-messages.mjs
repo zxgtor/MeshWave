@@ -63,9 +63,13 @@ Shift + 点击任一模型	Shift-click either mesh to
 此点在排除区域内，请先恢复该区域。	This point is excluded. Restore the region first.
 请在正在重选的一侧点击。	Click on the side being reselected.
 此顶点已被其他点对使用。	This vertex is already used by another pair.
+此点已被其他点对使用。	This point is already used by another pair.
+此模板点已被选用。	This template point is already selected.
+此目标点已被选用。	This target point is already selected.
 已更新对应点。	Correspondence updated.
 此模板顶点已被选用。	This template vertex is already selected.
 已选模板点 #	Selected template vertex #
+已选模板点	Selected template point
 ，请在右侧选择对应点。	; select its match on the right.
 请先在左侧选择模板点。	Select a template point on the left first.
 此目标顶点已被选用。	This target vertex is already selected.

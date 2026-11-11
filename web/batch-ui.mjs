@@ -36,7 +36,7 @@ export class BatchUI {
       let merged=null;const names=new Set();
       for(const file of Array.from(e.target.files||[])){
         if(file.size>1024*1024)throw Error('每个约束 JSON 上限 1 MB。');const value=JSON.parse(await file.text());
-        if(value.format!=='facewrap-batch-constraints'||value.version!==1||typeof value.templateTopologyHash!=='string'||!Array.isArray(value.items)||!value.items.length)throw Error('不是有效的批处理约束 JSON。');
+        if(value.format!=='facewrap-batch-constraints'||![1,2].includes(value.version)||typeof value.templateTopologyHash!=='string'||!Array.isArray(value.items)||!value.items.length)throw Error('不是有效的批处理约束 JSON。');
         if(merged&&merged.templateTopologyHash!==value.templateTopologyHash)throw Error('约束文件来自不同模板，不能合并。');
         merged||={format:value.format,version:1,templateTopologyHash:value.templateTopologyHash,items:[]};
         for(const item of value.items){if(typeof item.name!=='string'||names.has(item.name.toLowerCase()))throw Error('约束中存在无效或重复文件名。');names.add(item.name.toLowerCase());merged.items.push(item);}

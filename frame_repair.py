@@ -6,18 +6,22 @@ from scipy.sparse.linalg import splu
 from wrap_core import parse_obj,similarity,exclusion_masks
 from surface import TriangleSurface,FlipGuard,vertex_normals
 from brush_support import prepare_brush
+from point_constraints import validate_pairs,surface_pairs,pair_support,positions,point_matrix,solve_affine
 
 
 def repair_frame(body,before,after,fraction):
     started=perf_counter();source,faces=parse_obj(body['source']);target,tf=parse_obj(body['target']);pairs=body['pairs']
     if type(fraction) not in (int,float) or not np.isfinite(fraction) or not 0<fraction<1:raise ValueError('修复帧必须位于前后正常帧之间。')
-    p=np.asarray(pairs,int);left,right=p[:,0],p[:,1];masks=exclusion_masks(faces,tf,body['excludedFaces'],pairs)
-    r,k,a,b=similarity(source[left],target[right]);reference=(source-a)@r*k+b
+    pairs=validate_pairs(pairs,{'source':(source,faces),'target':(target,tf)},3);continuous=surface_pairs(pairs)
+    left=pair_support(pairs,0,faces);right=pair_support(pairs,1,tf);masks=exclusion_masks(faces,tf,body['excludedFaces'],pairs)
+    if not continuous:left=np.asarray(pairs,int)[:,0];right=np.asarray(pairs,int)[:,1]
+    c=point_matrix([p[0] for p in pairs],faces,len(source));targets=positions(target,tf,[p[1] for p in pairs])
+    r,k,a,b=similarity(c@source,targets);reference=(source-a)@r*k+b
     aligned=[]
     for neighbor in [before,after]:
         neighbor=np.asarray(neighbor,float)
         if neighbor.shape!=source.shape or not np.isfinite(neighbor).all():raise ValueError('修复参考帧顶点无效。')
-        r,k,a,b=similarity(neighbor[left],target[right]);aligned.append((neighbor-a)@r*k+b)
+        r,k,a,b=similarity(c@neighbor,targets);aligned.append((neighbor-a)@r*k+b)
     interpolated=aligned[0]*(1-fraction)+aligned[1]*fraction
     weights=body.get('brushWeights')
     if weights is None:weights=np.ones(len(source))
@@ -25,8 +29,9 @@ def repair_frame(body,before,after,fraction):
     weights=np.asarray(weights,float);protected=np.flatnonzero(weights==0);excluded=masks['source'][1]
     existing=body.get('vertices');existing=reference.copy() if existing is None else np.asarray(existing,float)
     if existing.shape!=source.shape or not np.isfinite(existing).all():raise ValueError('待修复几何无效。')
-    expected=interpolated.copy();expected[protected]=existing[protected];expected[excluded]=reference[excluded];expected[left]=target[right]
-    locked=np.unique(np.r_[protected,excluded,left]);free=np.setdiff1d(np.arange(len(source)),locked)
+    expected=interpolated.copy();expected[protected]=existing[protected];expected[excluded]=reference[excluded]
+    if not continuous:expected[left]=target[right]
+    locked=np.unique(np.r_[protected,excluded,[] if continuous else left]).astype(int);free=np.setdiff1d(np.arange(len(source)),locked)
     if not len(free):raise ValueError('全部模板顶点被约束锁定，无法重建异常结果。')
     unit=float(np.linalg.norm(np.ptp(target,axis=0)));center=target.mean(0)
     if not np.isfinite(unit) or unit<1e-12:raise ValueError('修复目标尺寸无效。')
@@ -35,8 +40,12 @@ def repair_frame(body,before,after,fraction):
     n=len(source);adj=sparse.coo_matrix((np.ones(len(edges)*2),(np.r_[edges[:,0],edges[:,1]],np.r_[edges[:,1],edges[:,0]])),shape=(n,n)).tocsr()
     degree=np.asarray(adj.sum(1)).ravel();laplacian=sparse.eye(n)-sparse.diags(1/np.maximum(degree,1))@adj;regularizer=(laplacian.T@laplacian).tocsc()
     correction=np.zeros_like(initial);correction[locked]=(expected[locked]-interpolated[locked])/unit
-    matrix=regularizer+1e-4*sparse.eye(n);correction[free]=splu(matrix[free][:,free].tocsc()).solve(-matrix[free][:,locked]@correction[locked])
+    matrix=regularizer+1e-4*sparse.eye(n);rhs=-matrix[free][:,locked]@correction[locked]
+    correction[free]=solve_affine(matrix[free][:,free].tocsc(),rhs,c[:,free],(targets-center)/unit-c@(initial+correction)) if continuous else splu(matrix[free][:,free].tocsc()).solve(rhs)
     seed=initial+correction;seed[locked]=(expected[locked]-center)/unit;guard=FlipGuard(ref,faces)
+    if continuous:
+        expected[left]=seed[left]*unit+center;locked=np.unique(np.r_[locked,left]);free=np.setdiff1d(np.arange(n),locked)
+        if not len(free):raise ValueError('全部模板顶点被约束锁定，无法重建异常结果。')
     if guard.safe_step(ref,seed)<1:raise ValueError('插值与本帧约束会导致翻面，未采用修复。')
     settings=body['settings'];iterations=settings['iterations'];smoothness=settings['smoothness'];angle=settings['normalAngle'];distance=body['distanceRatio']
     if type(iterations) is not int or not 5<=iterations<=50 or not .001<=distance<=.05:raise ValueError('修复迭代或最大修正距离无效。')

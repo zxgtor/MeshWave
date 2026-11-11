@@ -7,6 +7,7 @@ import { TargetSurface } from './target-surface.mjs';
 import { MeshReview } from './mesh-review.mjs';
 import { BatchUI } from './batch-ui.mjs';
 import { QualityUI } from './quality-ui.mjs';
+import {pointPosition,pointSupport,samePoint,pointLabel,pointFromHit,pairKey} from './surface-points.mjs';
 
 initializeLanguage();
 const $ = id => document.getElementById(id);
@@ -67,7 +68,9 @@ function setupView(side, color) {
     const candidates=state[side].faces[hit.faceIndex];
     const id=candidates.reduce((a,b)=>new THREE.Vector3().fromArray(vertices[a]).distanceToSquared(hit.point)<new THREE.Vector3().fromArray(vertices[b]).distanceToSquared(hit.point)?a:b);
     if(side==='source'&&qualityUI?.inspecting){qualityUI.select(id);return;}
-    if($('tool').value==='curves')pickCurve(side,id);else pick(side,id);
+    const spline=$('tool').value==='curves'&&state.curves[state.curveIndex]?.type==='spline';
+    const point=spline||$('tool').value!=='curves'&&$('point-mode').value==='surface'?pointFromHit(vertices,state[side].faces,hit.faceIndex,v.mesh.worldToLocal(hit.point.clone()).toArray()):id;
+    if($('tool').value==='curves')pickCurve(side,point);else pick(side,point);
   });
   renderer.domElement.addEventListener('pointercancel',()=>{controls.enabled=true;down=null;});
   if(side==='source')installBrush(v);
@@ -97,7 +100,7 @@ function updateWeightColors(ids=null){
   const mesh=views.source?.mesh;if(!mesh||!state.brushWeights||!$('show-weights').checked||state.flowSuggestion)return;
   const g=mesh.geometry;let color=g.attributes.color;
   if(!color){color=new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count*3),3);g.setAttribute('color',color);ids=null;}
-  const locked=brush.context?.locked||new Set([...blockedVertices('source'),...state.pairs.map(p=>p[0])]);
+  const locked=brush.context?.locked||new Set([...blockedVertices('source'),...state.pairs.flatMap(p=>pointSupport(state.source.faces,p[0]))]);
   const paint=(id,index)=>{const w=state.brushWeights[id];color.setXYZ(index,...(locked.has(id)?[.7,.035,.09]:[.07+.88*w,.32+.34*w,.95-.73*w]));};
   if(g.index){for(const id of ids||state.brushWeights.keys())paint(id,id);}
   else if(ids&&brush.context){for(const id of ids)for(const corner of brush.context.corners[id])paint(id,corner);}
@@ -129,9 +132,9 @@ function selectRegion(side,index) {
   if(state.result){status('请先恢复原始模板，再修改排除区域。',true);return;}
   const patch=regionPatch(side,index),exclude=$('tool').value==='exclude',current=state.excludedFaces[side];
   if(exclude){
-    const protectedIds=new Set(state.pairs.map(p=>p[side==='source'?0:1]));
-    for(const curve of state.curves)for(const id of curve[side])protectedIds.add(id);
-    if(side==='source'&&state.pending!==null)protectedIds.add(state.pending);
+    const protectedIds=new Set(state.pairs.flatMap(p=>pointSupport(data.faces,p[side==='source'?0:1])));
+    for(const curve of state.curves)for(const point of curve[side])for(const id of pointSupport(data.faces,point))protectedIds.add(id);
+    if(side==='source'&&state.pending!==null)pointSupport(state.source.faces,state.pending).forEach(id=>protectedIds.add(id));
     if([...patch].some(i=>state[side].faces[i].some(id=>protectedIds.has(id)))){status('区域包含对应点或曲线节点，请缩小范围或先调整节点。',true);return;}
     if(side==='target'&&new Set([...current,...patch]).size===state.target.faces.length){status('不能排除全部目标面。',true);return;}
   }
@@ -182,7 +185,7 @@ function update() {
   $('export').disabled=state.busy||!state.result;$('reset').disabled=state.busy||!state.result;
   $('undo').disabled=state.busy||(!count&&state.pending===null);$('clear').disabled=$('undo').disabled;
   $('overlay').disabled=state.busy||!ready;
-  for(const id of ['source','target','demo','iterations','smoothness','normal-angle','solver-mode','open-project','project-file','tool','region-size','cancel-edit'])$(id).disabled=state.busy;
+  for(const id of ['source','target','demo','iterations','smoothness','normal-angle','solver-mode','open-project','project-file','tool','point-mode','region-size','cancel-edit'])$(id).disabled=state.busy;
   for(const id of ['bake-resolution','bake-padding','bake-distance','show-textures','unlit-textures'])$(id).disabled=state.busy;
   for(const side of ['source','target']){
     $(`${side}-texture`).disabled=state.busy||!state[side]?.hasUV;
@@ -213,12 +216,12 @@ function update() {
   state.pairs.forEach((p,i)=>{
     const li=document.createElement('li'),number=document.createElement('span');setText(number,String(i+1).padStart(2,'0'));li.append(number);
     for(const [column,side,label] of [[0,'source','模板'],[1,'target','目标']]){
-      const button=document.createElement('button');setText(button,`${label} #${p[column]+1}`);setLabel(button,'aria-label',`重选第 ${i+1} 对${label}点`);button.disabled=state.busy;
+      const button=document.createElement('button');setText(button,`${label} ${pointLabel(p[column])}`);setLabel(button,'aria-label',`重选第 ${i+1} 对${label}点`);button.disabled=state.busy;
       button.classList.toggle('editing',state.edit?.index===i&&state.edit.side===side);button.onclick=()=>beginEdit(i,side);li.append(button);
     }
     const remove=document.createElement('button');setText(remove,'删');setLabel(remove,'aria-label',`删除第 ${i+1} 对`);remove.disabled=state.busy;remove.onclick=()=>{clearResult();state.pairs.splice(i,1);state.edit=null;changed();status(`已删除第 ${i+1} 对。`);update();};li.append(remove);list.append(li);
   });
-  if(state.pending!==null){const li=document.createElement('li');setText(li,`${count+1}　模板 #${state.pending+1} → 等待目标`);list.append(li);}
+  if(state.pending!==null){const li=document.createElement('li');setText(li,`${count+1}　模板 ${pointLabel(state.pending)} → 等待目标`);list.append(li);}
   renderMarkers();
   updateCurveControls();renderCurves();
   updateFlowControls();
@@ -235,25 +238,25 @@ function renderMarkers() {
     const points=(suggestion?suggestion.pairs:state.pairs).map(p=>p[side==='source'?0:1]);
     if(!suggestion&&side==='source'&&state.pending!==null)points.push(state.pending);
     const vertices=side==='source'&&state.result?state.result.vertices:state[side].vertices;
-    points.forEach((id,i)=>{const div=document.createElement('div');div.className='marker';div.classList.toggle('suggested',Boolean(suggestion));div.classList.toggle('editing',state.edit?.index===i&&state.edit.side===side);setText(div,suggestion?`A${i+1}`:i+1);if(suggestion)setLabel(div,'title',suggestion.names[i]);const marker=new CSS2DObject(div);marker.position.fromArray(vertices[id]);v.group.add(marker);v.markers.push(marker);});
+    points.forEach((id,i)=>{const div=document.createElement('div');div.className='marker';div.classList.toggle('suggested',Boolean(suggestion));div.classList.toggle('editing',state.edit?.index===i&&state.edit.side===side);setText(div,suggestion?`A${i+1}`:i+1);if(suggestion)setLabel(div,'title',suggestion.names[i]);const marker=new CSS2DObject(div);marker.position.fromArray(pointPosition(vertices,state[side].faces,id));v.group.add(marker);v.markers.push(marker);});
   }
 }
 function pick(side,id) {
   if(state.result){status('请先恢复原始模板，再修改对应点。',true);return;}
   if(!state.source||!state.target){status('请先导入两个模型。',true);return;}
-  if(blockedVertices(side).has(id)){status('此点在排除区域内，请先恢复该区域。',true);return;}
+  if(pointSupport(state[side].faces,id).some(i=>blockedVertices(side).has(i))){status('此点在排除区域内，请先恢复该区域。',true);return;}
   if(state.edit){
     if(side!==state.edit.side){status('请在正在重选的一侧点击。',true);return;}
     const column=side==='source'?0:1;
-    if(state.pairs.some((p,i)=>i!==state.edit.index&&p[column]===id)){status('此顶点已被其他点对使用。',true);return;}
+    if(state.pairs.some((p,i)=>i!==state.edit.index&&samePoint(state[side].faces,p[column],id))){status('此点已被其他点对使用。',true);return;}
     state.pairs[state.edit.index][column]=id;state.edit=null;changed();status('已更新对应点。');update();return;
   }
   if(side==='source'){
-    if(state.pairs.some(p=>p[0]===id)){status('此模板顶点已被选用。',true);return;}
-    state.pending=id;status(`已选模板点 #${id+1}，请在右侧选择对应点。`);
+    if(state.pairs.some(p=>samePoint(state.source.faces,p[0],id))){status('此模板点已被选用。',true);return;}
+    state.pending=id;status(`已选模板点 ${pointLabel(id)}，请在右侧选择对应点。`);
   }else{
     if(state.pending===null){status('请先在左侧选择模板点。',true);return;}
-    if(state.pairs.some(p=>p[1]===id)){status('此目标顶点已被选用。',true);return;}
+    if(state.pairs.some(p=>samePoint(state.target.faces,p[1],id))){status('此目标点已被选用。',true);return;}
     if(state.pairs.length>=100){status('最多支持 100 对对应点。',true);return;}
     state.pairs.push([state.pending,id]);state.pending=null;status(`已添加第 ${state.pairs.length} 对对应点。`);
   }changed();update();
@@ -291,8 +294,8 @@ $('auto-apply').onclick=()=>{
   changed();status('已采用自动对应点，请检查后开始贴合。');update();
 };
 $('auto-cancel').onclick=()=>{state.autoSuggestion=null;state.autoMessage='已取消检测建议，原点对未改变。';status(state.autoMessage);update();};
-function currentCurvePairs(){return state.curvePairs.filter(p=>state.pairs.some(q=>p[0]===q[0]&&p[1]===q[1]));}
-function curveBasePairs(){const keys=new Set(currentCurvePairs().map(p=>p.join(':')));return state.pairs.filter(p=>!keys.has(p.join(':')));}
+function currentCurvePairs(){return state.curvePairs.filter(p=>state.pairs.some(q=>pairKey(p)===pairKey(q)));}
+function curveBasePairs(){const keys=new Set(currentCurvePairs().map(pairKey));return state.pairs.filter(p=>!keys.has(pairKey(p)));}
 function curveRequest(pathOnly,curves=state.curves){for(const curve of curves)preserveName(`“${curve.name}”`);return {source:state.source.text,target:state.target.text,curves,pairs:curveBasePairs(),excludedFaces:serializedExclusions(),pathOnly};}
 function updateCurveControls(){
   const blocked=state.busy||!state.source||!state.target||Boolean(state.result)||state.pending!==null||state.edit!==null||Boolean(state.autoSuggestion);
@@ -300,6 +303,7 @@ function updateCurveControls(){
   const select=$('curve-select');select.replaceChildren(...state.curves.map((c,i)=>new Option(`${i+1} · ${c.name}`,String(i))));
   state.curveIndex=Math.max(0,Math.min(state.curveIndex,state.curves.length-1));select.value=String(state.curveIndex);
   const curve=state.curves[state.curveIndex];
+  setText($('curve-kind'),curve&&curve.type!=='spline'?'旧版网格折线':'三次表面样条');
   for(const id of ['curve-select','curve-name','curve-count','curve-closed','curve-undo-source','curve-undo-target','curve-reverse','curve-delete','curve-generate'])$(id).disabled=blocked||!curve;
   $('curve-generate').disabled=blocked||(!curve&&!currentCurvePairs().length);
   $('curve-apply').disabled=blocked||!state.curveSuggestion;$('curve-cancel').disabled=state.busy||!state.curveSuggestion;
@@ -313,10 +317,10 @@ function renderCurves(){
     for(const mark of view.curveMarks||[]){mark.removeFromParent();mark.element.remove();}view.curveMarks=[];
     if(!state[side]||state.result||$('tool').value!=='curves')continue;
     const vertices=state[side].vertices,curve=state.curves[state.curveIndex];
-    const label=(id,text,color)=>{const el=document.createElement('span');el.className='marker';setText(el,text);el.style.background=color;const mark=new CSS2DObject(el);mark.renderOrder=text.startsWith('S')?10:20;mark.position.fromArray(vertices[id]);view.group.add(mark);view.curveMarks.push(mark);};
+    const label=(id,text,color)=>{const el=document.createElement('span');el.className='marker';setText(el,text);el.style.background=color;const mark=new CSS2DObject(el);mark.renderOrder=text.startsWith('S')?10:20;mark.position.fromArray(pointPosition(vertices,state[side].faces,id));view.group.add(mark);view.curveMarks.push(mark);};
     if(curve){
       const path=state.curvePaths?.[state.curveIndex]?.[side];
-      if(path?.length>1){const g=new THREE.BufferGeometry().setFromPoints(path.map(id=>new THREE.Vector3().fromArray(vertices[id]))),line=new THREE.Line(g,new THREE.LineBasicMaterial({color:0x9dc0e6,depthTest:false,transparent:true,opacity:.9}));line.renderOrder=5;view.group.add(line);view.curveLines.push(line);}
+      if(path?.length>1){const g=new THREE.BufferGeometry().setFromPoints(path.map(id=>new THREE.Vector3().fromArray(pointPosition(vertices,state[side].faces,id)))),line=new THREE.Line(g,new THREE.LineBasicMaterial({color:0x9dc0e6,depthTest:false,transparent:true,opacity:.9}));line.renderOrder=5;view.group.add(line);view.curveLines.push(line);}
       curve[side].forEach((id,i)=>label(id,`${i===0?'起':i+1}`,'#9dc0e6'));
     }
     state.curveSuggestion?.pairs.forEach((p,i)=>label(p[side==='source'?0:1],`S${i+1}`,'#a8c6ff'));
@@ -332,7 +336,7 @@ function pickCurve(side,id){
   if(!state.curves[state.curveIndex]){status('请先点击“新增成对曲线”。',true);return;}
   editCurves(curves=>curves[state.curveIndex][side].push(id));
 }
-$('curve-new').onclick=()=>editCurves(curves=>{curves.push({name:`${translate('曲线')} ${curves.length+1}`,source:[],target:[],count:8,closed:false});state.curveIndex=curves.length-1;$('tool').value='curves';});
+$('curve-new').onclick=()=>editCurves(curves=>{curves.push({name:`${translate('曲线')} ${curves.length+1}`,type:'spline',source:[],target:[],count:8,closed:false});state.curveIndex=curves.length-1;$('tool').value='curves';});
 $('curve-select').onchange=()=>{state.curveIndex=Number($('curve-select').value);$('tool').value='curves';update();};
 $('curve-name').onchange=()=>{const name=$('curve-name').value;editCurves(curves=>{curves[state.curveIndex].name=name;});};
 $('curve-count').onchange=()=>{const count=Number($('curve-count').value);editCurves(curves=>{curves[state.curveIndex].count=count;});};
@@ -367,8 +371,8 @@ $('tool').onchange=()=>{state.edit=null;update();};
 $('undo-region').onclick=()=>{
   const action=state.regionUndo.at(-1),set=state.excludedFaces[action.side];
   if(!action.exclude){
-    const protectedIds=new Set(state.pairs.map(p=>p[action.side==='source'?0:1]));if(action.side==='source'&&state.pending!==null)protectedIds.add(state.pending);
-    for(const curve of state.curves)for(const id of curve[action.side])protectedIds.add(id);
+    const protectedIds=new Set(state.pairs.flatMap(p=>pointSupport(state[action.side].faces,p[action.side==='source'?0:1])));if(action.side==='source'&&state.pending!==null)pointSupport(state.source.faces,state.pending).forEach(id=>protectedIds.add(id));
+    for(const curve of state.curves)for(const point of curve[action.side])for(const id of pointSupport(state[action.side].faces,point))protectedIds.add(id);
     if(action.faces.some(i=>state[action.side].faces[i].some(id=>protectedIds.has(id)))){status('撤销会排除现有对应点或曲线节点，请先调整节点。',true);return;}
     if(action.side==='target'&&new Set([...set,...action.faces]).size===state.target.faces.length){status('撤销会排除全部目标面，无法执行。',true);return;}
   }
@@ -608,7 +612,7 @@ $('export-textured-model').onclick=async()=>{
   }catch(error){status(error.message,true);}finally{state.busy=false;update();}
 };
 function projectData(){
-  return {format:'facewrap-lite',version:1,curves:state.curves,curvePairs:currentCurvePairs(),brushWeights:state.brushWeights?Array.from(state.brushWeights):null,models:Object.fromEntries(['source','target'].map(side=>[side,state[side]?{name:state[side].name,text:state[side].text,texture:state[side].texture}:null])),
+  return {format:'facewrap-lite',version:state.pairs.some(p=>p.some(x=>!Number.isInteger(x)))||state.pending!==null&&!Number.isInteger(state.pending)||state.curves.some(c=>c.type==='spline')?2:1,curves:state.curves,curvePairs:currentCurvePairs(),brushWeights:state.brushWeights?Array.from(state.brushWeights):null,models:Object.fromEntries(['source','target'].map(side=>[side,state[side]?{name:state[side].name,text:state[side].text,texture:state[side].texture}:null])),
     pairs:state.pairs,pending:state.pending,excludedFaces:serializedExclusions(),settings:{iterations:Number($('iterations').value),smoothness:Number($('smoothness').value),normalAngle:Number($('normal-angle').value),solverMode:$('solver-mode').value,bake:bakeSettings(),brush:brushSettings(),flow:flowSettings()},result:state.result?{vertices:state.result.vertices,texture:state.result.texture,manualEdits:Boolean(state.result.manualEdits),textureRefined:Boolean(state.result.textureRefined)}:null};
 }
 $('save-project').onclick=async()=>{
@@ -658,7 +662,7 @@ function updateFlowControls(){
   $('flow-run').disabled=state.busy||pending||!ready;$('flow-apply').disabled=state.busy||!pending;$('flow-cancel').disabled=state.busy||!pending;
   for(const id of Object.values(flowInputs))$(id).disabled=state.busy||pending;
   if(pending){
-    for(const id of ['run','reset','export','export-texture','export-textured-model','bake','brush-tool','brush-radius','brush-strength','brush-undo','brush-redo','weight-target','show-weights','weight-protect-all','weight-edit-all','source','target','demo','iterations','smoothness','normal-angle','solver-mode','open-project','project-file','source-texture','target-texture','remove-source-texture','remove-target-texture','health-current','health-file','health-undo','undo','clear','undo-region','clear-regions','tool','region-size','cancel-edit'])$(id).disabled=true;
+    for(const id of ['run','reset','export','export-texture','export-textured-model','bake','brush-tool','brush-radius','brush-strength','brush-undo','brush-redo','weight-target','show-weights','weight-protect-all','weight-edit-all','source','target','demo','iterations','smoothness','normal-angle','solver-mode','open-project','project-file','source-texture','target-texture','remove-source-texture','remove-target-texture','health-current','health-file','health-undo','undo','clear','undo-region','clear-regions','tool','point-mode','region-size','cancel-edit'])$(id).disabled=true;
     for(const button of $('pairs').querySelectorAll('button'))button.disabled=true;
     setText($('phase'),'纹理细化预览');setText($('instruction'),'左侧显示候选几何；采用后才替换结果，取消保留原结果。此时保存工程仍保存原结果。');
   }

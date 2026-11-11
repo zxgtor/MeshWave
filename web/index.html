@@ -19,6 +19,8 @@
 <label class="file">目标模型 <span class="target-dot">●</span><input id="target" type="file" accept=".obj"><b id="target-name">选择 OBJ 文件</b><small id="target-info">模板将贴合此模型的表面</small></label>
 <p class="hint">模板 ≤ 100,000 顶点（高精度需多阶段）<br>目标 ≤ 200,000 顶点 · 单文件 ≤ 18 MB</p></section>
 <section><div class="section-title"><span>02</span><h2>选择对应点</h2><b id="pair-count">0 对</b></div>
+<div class="settings"><label for="point-mode">选点方式</label><select id="point-mode"><option value="surface">连续表面点</option><option value="vertex">吸附到顶点</option></select></div>
+<p class="hint">表面点保存在三角面内部，不吸附顶点；标记随模板形变。求解严格保持重心坐标约束。旧顶点点对仍可编辑。</p>
 <button id="auto-landmarks" disabled>自动识别人脸点</button>
 <p class="hint">先将两侧人脸放大并转到正面。使用灰模渲染检测，无需 UV；先预览建议，再采用或手动修正。已有贴合结果时先恢复原始模板。</p>
 <p id="auto-info" class="hint" role="status">尚未自动检测</p>
@@ -32,7 +34,8 @@
 <label class="hint"><input id="curve-closed" type="checkbox" disabled> 闭合曲线（两侧起点需对应）</label>
 <div class="point-tools"><button id="curve-undo-source" disabled>撤销左节点</button><button id="curve-undo-target" disabled>撤销右节点</button></div>
 <div class="point-tools"><button id="curve-reverse" disabled>反转右侧方向</button><button id="curve-delete" disabled>删除此曲线</button></div>
-<p class="hint">新增后 Shift + 点击两侧模型，依次绘制同一部位；每侧至少 2 个节点。按网格表面折线连接，非平滑样条。节点编号表示方向；过粗网格请减少采样数。已有结果请先恢复原始模板。</p>
+<p id="curve-kind" class="hint">三次表面样条</p>
+<p class="hint">新曲线使用三次插值样条，投射到相连且法线相容的表面，再按弧长生成连续表面点。Shift 点击两侧添加控制点，起点与方向需对应；每侧至少 2 点，3 点以上可产生弯曲。旧工程的网格折线保持原方式。已有结果请先恢复模板。</p>
 <button id="curve-generate" disabled>生成对应点预览</button>
 <div class="point-tools"><button id="curve-apply" disabled>采用曲线点</button><button id="curve-cancel" disabled>取消预览</button></div>
 <p id="curve-info" class="hint" role="status">曲线点采用后才参与求解。修改曲线后请重新生成并采用；采用前保留旧点对。</p></section>

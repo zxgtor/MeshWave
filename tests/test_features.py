@@ -64,7 +64,7 @@ class FeatureTests(unittest.TestCase):
         self.assertIsNone(validate_project(p)['models']['source'])
 
     def test_malformed_project_rejected(self):
-        modifications=[{'version':2},{'pairs':[[0,0],[0,1]]},{'pairs':[[99999,0]]},
+        modifications=[{'version':999},{'pairs':[[0,0],[0,1]]},{'pairs':[[99999,0]]},
             {'pending':0},{'pending':30},{'pending':False},{'excludedFaces':{'source':[-1]}},
             {'settings':{'iterations':51}},{'settings':{'iterations':20,'smoothness':float('nan')}},
             {'result':{'vertices':[[0,0,0]]}},{'models':{'source':None,'target':None}}]

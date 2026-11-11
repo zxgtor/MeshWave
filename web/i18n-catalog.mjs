@@ -3,6 +3,14 @@ export default `
 Mesh Wave · 网格贴合工作台	Mesh Wave · Mesh Fitting Workbench
 网格贴合工作台	Mesh Fitting Workbench
 界面语言	Interface Language
+选点方式	Point Placement
+连续表面点	Surface Point
+吸附到顶点	Snap to Vertex
+面 #	Face #
+表面点保存在三角面内部，不吸附顶点；标记随模板形变。求解严格保持重心坐标约束。旧顶点点对仍可编辑。	Surface points are stored inside triangles without vertex snapping; markers follow template deformation. Fitting enforces barycentric equalities. Existing vertex pairs remain editable.
+三次表面样条	Cubic Surface Spline
+旧版网格折线	Legacy Mesh Polyline
+新曲线使用三次插值样条，投射到相连且法线相容的表面，再按弧长生成连续表面点。Shift 点击两侧添加控制点，起点与方向需对应；每侧至少 2 点，3 点以上可产生弯曲。旧工程的网格折线保持原方式。已有结果请先恢复模板。	New curves use interpolating cubic splines projected onto connected, normal-compatible surfaces, then sampled by arc length into continuous surface points. Shift-click both sides to add controls; match starts and direction. Use at least 2 controls per side; 3 or more allow curvature. Legacy project polylines retain their behavior. Restore the template before editing a result.
 贴合质量检查	Fit Quality Inspection
 计算／刷新误差	Compute / Refresh Errors
 显示贴合误差热图	Show Fit Error Heatmap

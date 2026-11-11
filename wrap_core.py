@@ -112,13 +112,14 @@ def index_list(values, limit, label):
 
 
 def exclusion_masks(source_faces, target_faces, excluded_faces, pairs):
+    from point_constraints import pair_support
     if not isinstance(excluded_faces, dict):
         raise ValueError('排除区域格式无效。')
     masks = {}
     for side, faces, column in [('source', source_faces, 0), ('target', target_faces, 1)]:
         selected = index_list(excluded_faces.get(side, []), len(faces), '排除面')
         vertices = np.unique(faces[selected]) if len(selected) else np.array([], dtype=np.int64)
-        if len(pairs) and np.intersect1d(vertices, np.asarray(pairs)[:, column]).size:
+        if len(pairs) and np.intersect1d(vertices, pair_support(pairs,column,faces)).size:
             raise ValueError('排除区域包含对应点，请先移动或删除冲突的点对。')
         if side == 'target' and len(selected) == len(faces):
             raise ValueError('不能排除全部目标面。')
@@ -127,6 +128,10 @@ def exclusion_masks(source_faces, target_faces, excluded_faces, pairs):
 
 
 def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, excluded_faces=None, normal_angle=60, solver_mode='single'):
+    from point_constraints import surface_pairs
+    if isinstance(pairs,list) and all(isinstance(p,list) and len(p)==2 for p in pairs) and surface_pairs(pairs):
+        from surface_wrap import wrap_surface
+        return wrap_surface(source_text,target_text,pairs,iterations,smoothness,excluded_faces,normal_angle,solver_mode)
     started=perf_counter()
     source, faces = parse_obj(source_text)
     target, target_faces = parse_obj(target_text)
