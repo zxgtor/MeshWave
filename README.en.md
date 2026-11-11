@@ -25,31 +25,31 @@ For detailed controls and limitations, see the [user guide (Chinese)](docs/user-
 
 ## Screenshots
 
-These screenshots show the Chinese version of the running Graphite Studio interface using the built-in synthetic demo meshes and checkerboard texture. They illustrate the workflow, not fitting accuracy on real face scans. The app supports both Chinese and English; use the language selector in the top-right corner to switch.
+These screenshots show the English version of the running Graphite Studio interface using the built-in synthetic demo meshes and checkerboard texture. They illustrate the workflow, not fitting accuracy on real face scans. The app supports both Chinese and English; use the language selector in the top-right corner to switch.
 
 ### Point correspondences
 
 Inspect the template and target side by side and establish correspondences with numbered point pairs.
 
-![Template and target views with numbered point correspondences](docs/screenshots/correspondences.png)
+![Template and target views with numbered point correspondences](docs/screenshots/correspondences-en.png)
 
 ### Coarse-to-fine fitting
 
 Review stage statistics, surface distances, and export controls after fitting.
 
-![Multi-stage non-rigid fitting result and stage statistics](docs/screenshots/fitting.png)
+![Multi-stage non-rigid fitting result and stage statistics](docs/screenshots/fitting-en.png)
 
 ### Weight painting
 
 Paint gradual influence weights on the mesh. Blue indicates low-weight protection, while red highlights hard constraints. Brush strokes support undo and redo.
 
-![Weight painting controls and a gradual protection region on the template](docs/screenshots/weight-brush.png)
+![Weight painting controls and a gradual protection region on the template](docs/screenshots/weight-brush-en.png)
 
 ### Texture baking and export
 
 Transfer scan colors to the template UVs, inspect the baked image and coverage, and export a PNG or textured mesh ZIP.
 
-![Scan texture baked onto the template with the UV texture preview](docs/screenshots/texture-baking.png)
+![Scan texture baked onto the template with the UV texture preview](docs/screenshots/texture-baking-en.png)
 
 ## Requirements
 
