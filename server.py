@@ -68,7 +68,7 @@ class Handler(SimpleHTTPRequestHandler):
                 try:
                     if self.path == '/api/wrap':
                         result = wrap(body['source'], body['target'], body['pairs'],
-                            body.get('iterations', 20), body.get('smoothness', 4), body.get('excludedFaces'), body.get('normalAngle', 60), body.get('solverMode', 'single'))
+                            body.get('iterations', 20), body.get('smoothness', 4), body.get('excludedFaces'), body.get('normalAngle', 60), body.get('solverMode', 'single'), body.get('brushWeights'))
                     elif self.path == '/api/bake':
                         result = bake_texture(body['source'], body['target'], body['vertices'], body['targetTexture'],
                             body.get('resolution', 1024), body.get('padding', 8), body.get('distanceRatio', .02),

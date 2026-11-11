@@ -1,5 +1,16 @@
 // Chinese source messages remain stable; only their presentation is localized.
 export default `
+蓝色 0% 保护 → 金色 100% 完全影响；红色为硬锁定。绘制值决定目标权重，沿用上方半径和强度；权重影响重新几何贴合、手动笔刷、纹理细化和时序平滑。	Blue 0% protection → gold 100% influence; red indicates hard locks. The paint value sets the target weight using the radius and strength above. Weights affect geometry refitting, manual brushes, texture refinement, and temporal smoothing.
+模板区行为	Template Region
+整体对齐后固定	Keep Aligned
+不贴面随动	Follow Neighbors
+已切换模板排除区行为，请重新贴合。	Template region behavior changed. Run fitting again.
+已撤销模板区域模式切换。	Undid template region mode change.
+模板区域模式无效。	Invalid template region mode.
+几何软权重必须与模板顶点一一对应，范围为 0–1。	Geometry weights must match template vertices and range from 0 to 1.
+不是支持的 Mesh Wave 工程文件（版本 1、2 或 3）。	Unsupported Mesh Wave project (expected version 1, 2, or 3).
+Shift + 点击选择区域。模板区行为统一应用于所有模板排除面：红色固定，青色不参与贴面但随周围形变。目标红色区域不参与匹配；对应点及曲线节点所在面不可排除。	Shift-click to select regions. The template mode applies to all excluded template faces: red stays fixed; cyan follows surrounding deformation without fitting. Red target regions are excluded from matching. Faces containing correspondence points or curve controls cannot be excluded.
+软权重也参与重新贴合：0% 保持整体对齐位置，1–100% 调节表面吸附；硬对应点优先。先贴合并绘制权重，再重新求解。权重和区域模式随工程及批次保存。	Soft weights also affect refitting: 0% preserves the aligned position; 1–100% controls surface attraction. Hard correspondences take priority. Fit once, paint weights, then solve again. Weights and region mode are saved with projects and batch snapshots.
 Mesh Wave · 网格贴合工作台	Mesh Wave · Mesh Fitting Workbench
 网格贴合工作台	Mesh Fitting Workbench
 界面语言	Interface Language

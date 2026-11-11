@@ -10,9 +10,9 @@ class Heap {
   pop(){const a=this.items,top=a[0],last=a.pop();if(a.length){let i=0;while(i*2+1<a.length){let j=i*2+1;if(j+1<a.length&&a[j+1][0]<a[j][0])j++;if(a[j][0]>=last[0])break;a[i]=a[j];i=j;}a[i]=last;}return top;}
 }
 export class BrushMesh {
-  constructor(vertices,faces,reference,locked=[],unit=1,weights=null){
+  constructor(vertices,faces,reference,locked=[],unit=1,weights=null,unfitted=[]){
     this.positions=Float64Array.from(vertices.flat());this.faces=faces.map(f=>[...f]);this.unit=unit;
-    this.locked=new Set(locked);this.n=vertices.length;
+    this.unfitted=new Set(unfitted);this.locked=new Set(locked);this.n=vertices.length;
     if(weights&&(weights.length!==this.n||Array.from(weights).some(x=>!Number.isFinite(x)||x<0||x>1)))throw Error('笔刷权重必须与模板顶点一一对应，范围为 0–1。');
     this.weights=weights?Float64Array.from(weights):new Float64Array(this.n).fill(1);
     this.corners=Array.from({length:this.n},()=>[]);const neighbors=Array.from({length:this.n},()=>new Set());
@@ -88,7 +88,10 @@ export class BrushMesh {
         const average=[0,0,0];for(const next of this.neighbors[id]){const p=this.vertex(next);for(let j=0;j<3;j++)average[j]+=p[j];}
         delta=sub(average.map(x=>x/this.neighbors[id].length),this.vertex(id)).map(x=>x*.3*(tool==='smooth-project'?1:strength*falloff));
       }else delta=this.normal(id).map(x=>x*radius*.035*strength*falloff*(tool==='pull'?1:-1));
-      if(projecting){
+      if(projecting&&this.unfitted.has(id)){
+        if(tool==='project')continue;
+        delta=delta.map(x=>x*strength*falloff);
+      }else if(projecting){
         const p=this.vertex(id),normal=this.normal(id),cosine=Math.cos(normalAngle*Math.PI/180);
         // Reject an out-of-range starting vertex before relaxing it toward another sheet.
         const anchor=surface.query(p,normal,radius,cosine);

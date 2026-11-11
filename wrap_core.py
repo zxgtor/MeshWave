@@ -115,6 +115,9 @@ def exclusion_masks(source_faces, target_faces, excluded_faces, pairs):
     from point_constraints import pair_support
     if not isinstance(excluded_faces, dict):
         raise ValueError('排除区域格式无效。')
+    mode = excluded_faces.get('sourceMode', 'fixed')
+    if mode not in ('fixed', 'follow'):
+        raise ValueError('模板区域模式无效。')
     masks = {}
     for side, faces, column in [('source', source_faces, 0), ('target', target_faces, 1)]:
         selected = index_list(excluded_faces.get(side, []), len(faces), '排除面')
@@ -124,14 +127,17 @@ def exclusion_masks(source_faces, target_faces, excluded_faces, pairs):
         if side == 'target' and len(selected) == len(faces):
             raise ValueError('不能排除全部目标面。')
         masks[side] = (selected, vertices)
+    masks['fixedSource'] = masks['source'][1] if mode == 'fixed' else np.array([], dtype=np.int64)
     return masks
 
 
-def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, excluded_faces=None, normal_angle=60, solver_mode='single'):
+def wrap(source_text, target_text, pairs, iterations=20, smoothness=4.0, excluded_faces=None, normal_angle=60, solver_mode='single', brush_weights=None):
     from point_constraints import surface_pairs
-    if isinstance(pairs,list) and all(isinstance(p,list) and len(p)==2 for p in pairs) and surface_pairs(pairs):
+    if (brush_weights is not None
+            or isinstance(excluded_faces,dict) and excluded_faces.get('sourceMode')=='follow'
+            or isinstance(pairs,list) and all(isinstance(p,list) and len(p)==2 for p in pairs) and surface_pairs(pairs)):
         from surface_wrap import wrap_surface
-        return wrap_surface(source_text,target_text,pairs,iterations,smoothness,excluded_faces,normal_angle,solver_mode)
+        return wrap_surface(source_text,target_text,pairs,iterations,smoothness,excluded_faces,normal_angle,solver_mode,brush_weights)
     started=perf_counter()
     source, faces = parse_obj(source_text)
     target, target_faces = parse_obj(target_text)

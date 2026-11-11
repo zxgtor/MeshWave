@@ -26,7 +26,7 @@ def repair_frame(body,before,after,fraction):
     weights=body.get('brushWeights')
     if weights is None:weights=np.ones(len(source))
     elif not isinstance(weights,list) or len(weights)!=len(source) or any(type(v) not in (int,float) or not np.isfinite(v) or not 0<=v<=1 for v in weights):raise ValueError('修复软权重无效。')
-    weights=np.asarray(weights,float);protected=np.flatnonzero(weights==0);excluded=masks['source'][1]
+    weights=np.asarray(weights,float);protected=np.flatnonzero(weights==0);excluded=masks['fixedSource']
     existing=body.get('vertices');existing=reference.copy() if existing is None else np.asarray(existing,float)
     if existing.shape!=source.shape or not np.isfinite(existing).all():raise ValueError('待修复几何无效。')
     expected=interpolated.copy();expected[protected]=existing[protected];expected[excluded]=reference[excluded]
@@ -60,7 +60,7 @@ def repair_frame(body,before,after,fraction):
     surface=TriangleSurface(fixed,tf[trusted]);current=seed.copy();limited=0;history=[];last_matches=0
     for _ in range(iterations):
         closest,distances,_=surface.query(current[free],vertex_normals(current,faces)[free],np.cos(np.deg2rad(angle)))
-        eligible=np.isfinite(distances)&(np.linalg.norm(closest-seed[free],axis=1)<=distance)
+        eligible=~np.isin(free,masks['source'][1])&np.isfinite(distances)&(np.linalg.norm(closest-seed[free],axis=1)<=distance)
         if eligible.sum()<max(3,int(len(free)*.01)):raise ValueError('修复后的可信表面匹配不足，保留隔离。')
         weight=np.zeros(n);weight[free[eligible]]=weights[free[eligible]]
         rhs=np.zeros_like(seed);rhs[free[eligible]]=weight[free[eligible],None]*(closest[eligible]-seed[free[eligible]])

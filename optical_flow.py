@@ -133,6 +133,7 @@ def refine_texture(body):
     weights=np.asarray(weights,float);locked=np.unique(np.r_[reference['locked'],np.flatnonzero(weights==0)]).astype(int);locked_set=set(locked.tolist());free=np.setdiff1d(np.arange(len(source)),locked)
     if not len(free):raise ValueError('所有模板顶点均被锁定，无法纹理细化。')
     masks=exclusion_masks(faces,tf,body.get('excludedFaces',{}),body['pairs'])
+    excluded_source=set(masks['source'][1].tolist())
     source_image=prepare_image(read_texture(body['sourceTexture']));target_image=prepare_image(read_texture(body['targetTexture']))
     camera_list=cameras(current,fixed,body.get('cameraWorld'),settings['views']);angle=body.get('normalAngle',60)
     if type(angle) not in (int,float) or not np.isfinite(angle) or not 10<=angle<=89:raise ValueError('法线夹角必须为 10–89 度。')
@@ -158,7 +159,7 @@ def refine_texture(body):
             ids,points,w=visible_correspondences(current,faces,fixed,tf,a,b,c,max_distance,cosine)
             for i,p,weight in zip(ids,points,w):observations[i].append((p,weight))
         for i,items in enumerate(observations):
-            if not items or i in locked_set:continue
+            if not items or i in locked_set or i in excluded_source:continue
             points=np.array([p for p,_ in items]);w=np.array([w for _,w in items]);median=np.median(points,axis=0);valid=np.linalg.norm(points-median,axis=1)<=max_distance*.5
             if valid.any():positions[i]=np.average(points[valid],axis=0,weights=w[valid]);confidence[i]=float(w[valid].mean())*weights[i];used_count+=int(valid.sum())
         matched=np.flatnonzero(confidence>0)
@@ -169,7 +170,7 @@ def refine_texture(body):
         delta=np.zeros_like(current);delta[free]=splu(matrix[free][:,free].tocsc()).solve(rhs[free])
         size=np.linalg.norm(delta,axis=1);delta*=np.minimum(1,max_distance/np.maximum(size,1e-30))[:,None]
         proposal=current+delta*(settings['strength']/100)*weights[:,None]
-        moving=free[np.linalg.norm(proposal[free]-current[free],axis=1)>1e-10]
+        moving=np.setdiff1d(free[np.linalg.norm(proposal[free]-current[free],axis=1)>1e-10],masks['source'][1])
         if len(moving):
             q,d,_=surface.query(proposal[moving],vertex_normals(current,faces)[moving],cosine)
             valid=np.isfinite(d)&(np.linalg.norm(q-current[moving],axis=1)<=max_distance)

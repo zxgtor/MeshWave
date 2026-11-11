@@ -124,7 +124,12 @@ class BatchManager:
             bake={'resolution':resolution,'padding':padding,'distanceRatio':ratio}
         if settings['solverMode']=='single' and len(sv)>25000:raise ValueError('超过 25,000 顶点请使用多阶段模式。')
         excluded=index_list(body.get('excludedSourceFaces',[]),len(sf),'模板排除面').tolist();signature=topology_hash(sv,sf)
-        config={'mode':mode,'sourceName':source['name'][:255],'sourceVertexCount':len(sv),'sourceHash':hashlib.sha256(source['text'].encode()).hexdigest(),'templateTopologyHash':signature,'settings':settings,'excludedSourceFaces':excluded,'useCurrentResult':body.get('useCurrentResult',False),'constraints':{}}
+        region_mode=body.get('sourceRegionMode','fixed')
+        if region_mode not in ('fixed','follow'):raise ValueError('模板区域模式无效。')
+        geometry_weights=body.get('brushWeights')
+        if geometry_weights is not None and (not isinstance(geometry_weights,list) or len(geometry_weights)!=len(sv) or any(type(w) not in (int,float) or not np.isfinite(w) or not 0<=w<=1 for w in geometry_weights)):
+            raise ValueError('几何软权重必须与模板顶点一一对应，范围为 0–1。')
+        config={'mode':mode,'sourceName':source['name'][:255],'sourceVertexCount':len(sv),'sourceHash':hashlib.sha256(source['text'].encode()).hexdigest(),'templateTopologyHash':signature,'settings':settings,'excludedSourceFaces':excluded,'sourceRegionMode':region_mode,'brushWeights':geometry_weights,'useCurrentResult':body.get('useCurrentResult',False),'constraints':{}}
         config['bake']=bake
         temporal=body.get('temporal')
         if temporal is not None:
@@ -256,7 +261,7 @@ class BatchManager:
     def _bake_result(self,job,item,source,target,vertices,constraints,relative,size,config,texture=None):
         path=self._path(job['id']);bake=config['bake'];excluded_source=config['excludedSourceFaces'];settings=config['settings']
         if texture is None:texture={'name':item.get('textureName','scan.png'),'dataUrl':item['textureHeader']+','+base64.b64encode((path/'inputs'/f'{item["id"]}.texture').read_bytes()).decode()}
-        baked=bake_texture(source,target,vertices,texture,**{'resolution':bake['resolution'],'padding':bake['padding'],'distance_ratio':bake['distanceRatio'],'normal_angle':settings['normalAngle'],'excluded_faces':{'source':excluded_source,'target':constraints['excludedTargetFaces']}})
+        baked=bake_texture(source,target,vertices,texture,**{'resolution':bake['resolution'],'padding':bake['padding'],'distance_ratio':bake['distanceRatio'],'normal_angle':settings['normalAngle'],'excluded_faces':{'source':excluded_source,'sourceMode':config.get('sourceRegionMode','fixed'),'target':constraints['excludedTargetFaces']}})
         bundle=texture_bundle(source,vertices,baked['texture'])
         folder=relative[:-4];assets={}
         with zipfile.ZipFile(io.BytesIO(bundle)) as package:
@@ -292,7 +297,7 @@ class BatchManager:
                 if prior is None:previous_filtered=None;previous_raw=None
                 load=lambda entry:np.load(path/'inputs'/f'{entry["id"]}.temporal.npy',allow_pickle=False) if entry else None
                 current=load(item)
-                smoothed=smooth_frame({'source':source,'target':target,'vertices':current.tolist(),'pairs':constraints['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'target':constraints['excludedTargetFaces']},'normalAngle':config['settings']['normalAngle'],'settings':ts,'brushWeights':ts['brushWeights'],'motionPrevious':previous_raw.tolist() if previous_raw is not None else None},load(prior) if bidirectional else previous_filtered,load(following) if bidirectional else None)
+                smoothed=smooth_frame({'source':source,'target':target,'vertices':current.tolist(),'pairs':constraints['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'sourceMode':config.get('sourceRegionMode','fixed'),'target':constraints['excludedTargetFaces']},'normalAngle':config['settings']['normalAngle'],'settings':ts,'brushWeights':ts['brushWeights'],'motionPrevious':previous_raw.tolist() if previous_raw is not None else None},load(prior) if bidirectional else previous_filtered,load(following) if bidirectional else None)
                 relative=item['resultFile'];size=(path/relative).stat().st_size;text=export_obj(source,smoothed['vertices']);new_size=len(text.encode('utf-8'))
                 if job['outputBytes']-size+new_size>MAX_BYTES:raise BatchOutputLimit('双向平滑输出超过 256 MB 上限。')
                 temporary=path/(relative+'.tmp');temporary.write_text(text,encoding='utf-8',newline='');temporary.replace(path/relative)
@@ -337,7 +342,7 @@ class BatchManager:
                 before,after=job['items'][left],job['items'][right];bv,av=load(before),load(after)
                 c={'pairs':config['pairs'],'excludedTargetFaces':config['excludedTargetFaces']} if config['mode']=='sequence' else config['constraints'][item['name'].casefold()]
                 target=(path/'inputs'/f'{item["id"]}.obj').read_text(encoding='utf-8');old_cache=path/'inputs'/f'{item["id"]}.temporal.npy'
-                body={'source':source,'target':target,'vertices':load(item).tolist() if old_cache.is_file() else parse_obj((path/original_file).read_text(encoding='utf-8'))[0].tolist() if original_file else None,'pairs':c['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'target':c['excludedTargetFaces']},'brushWeights':ts['brushWeights'],'settings':config['settings'],'distanceRatio':ts['distancePercent']/100}
+                body={'source':source,'target':target,'vertices':load(item).tolist() if old_cache.is_file() else parse_obj((path/original_file).read_text(encoding='utf-8'))[0].tolist() if original_file else None,'pairs':c['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'sourceMode':config.get('sourceRegionMode','fixed'),'target':c['excludedTargetFaces']},'brushWeights':ts['brushWeights'],'settings':config['settings'],'distanceRatio':ts['distancePercent']/100}
                 repaired=repair_frame(body,bv,av,(index-left)/(right-left))
                 quality=fit_quality(source,target,repaired['vertices'],c['pairs'],body['excludedFaces'],ts['brushWeights'])
                 full_scan_quality=quality
@@ -379,7 +384,7 @@ class BatchManager:
             try:
                 with self.lock:item.update(stage='anomaly',anomalyStatus='pending');self._save(job)
                 c=constraints(item);target=(path/'inputs'/f'{item["id"]}.obj').read_text(encoding='utf-8')
-                quality=fit_quality(source,target,load(item),c['pairs'],{'source':config['excludedSourceFaces'],'target':c['excludedTargetFaces']},ts['brushWeights'])
+                quality=fit_quality(source,target,load(item),c['pairs'],{'source':config['excludedSourceFaces'],'sourceMode':config.get('sourceRegionMode','fixed'),'target':c['excludedTargetFaces']},ts['brushWeights'])
                 with self.lock:item['fitQuality']=quality
             except Exception as exc:
                 with self.lock:item.update(status='failed',anomalyStatus='failed',temporalStatus='skipped',bakeStatus='skipped',error='异常检测失败（几何已保留）：'+str(exc)[:800])
@@ -396,7 +401,7 @@ class BatchManager:
                 with self.lock:item['stage']='anomaly';self._save(job)
                 c=constraints(item);target=(path/'inputs'/f'{item["id"]}.obj').read_text(encoding='utf-8')
                 prior=job['items'][index-1] if index else None;following=job['items'][index+1] if index+1<len(job['items']) else None;current=load(item)
-                verdict=classify_frame({'source':source,'target':target,'vertices':current,'pairs':c['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'target':c['excludedTargetFaces']},'brushWeights':ts['brushWeights'],'threshold':ts['anomalyPercent'],'scanQuality':item.get('scanQuality',{}),'fitQuality':item.get('fitQuality',{}),'neighbors':[evidence[n] for n in [index-1,index+1] if 0<=n<len(evidence)]},load(prior),load(following))
+                verdict=classify_frame({'source':source,'target':target,'vertices':current,'pairs':c['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'sourceMode':config.get('sourceRegionMode','fixed'),'target':c['excludedTargetFaces']},'brushWeights':ts['brushWeights'],'threshold':ts['anomalyPercent'],'scanQuality':item.get('scanQuality',{}),'fitQuality':item.get('fitQuality',{}),'neighbors':[evidence[n] for n in [index-1,index+1] if 0<=n<len(evidence)]},load(prior),load(following))
                 with self.lock:
                     item.update(anomalyStatus=verdict['status'],anomalyStats=verdict['stats'])
                     if verdict['status']=='rejected':item.update(status='failed',temporalStatus='skipped',bakeStatus='skipped',error='可疑异常帧，已隔离（保留已有几何和约束，未平滑/烘焙）：'+'；'.join(labels[r] for r in verdict['stats']['reasons'])+('。原错误：'+item['error'] if item.get('error') else ''))
@@ -431,7 +436,7 @@ class BatchManager:
                     if config.get('temporal',{}).get('detectAnomalies'):
                         quality=scan_quality(target,constraints['excludedTargetFaces'],constraints['pairs']);quality['topologyHash']=topology_hash(tv,tf)
                         with self.lock:item.update(scanQuality=quality,anomalyStatus='pending');self._save(job)
-                    settings=config['settings'];result=wrap(source,target,constraints['pairs'],settings['iterations'],settings['smoothness'],{'source':config['excludedSourceFaces'],'target':constraints['excludedTargetFaces']},settings['normalAngle'],settings['solverMode'])
+                    settings=config['settings'];result=wrap(source,target,constraints['pairs'],settings['iterations'],settings['smoothness'],{'source':config['excludedSourceFaces'],'sourceMode':config.get('sourceRegionMode','fixed'),'target':constraints['excludedTargetFaces']},settings['normalAngle'],settings['solverMode'],config.get('brushWeights'))
                     text=export_obj(source,result['vertices']);size=len(text.encode('utf-8'))
                     if job['outputBytes']+size>MAX_BYTES:limited=True;raise ValueError('批量输出超过 256 MB 上限，请拆分批次。')
                     stem=re.sub(r'[^\w.-]+','_',Path(item['name']).stem,flags=re.UNICODE).strip('._')[:100] or 'scan';relative=f'results/{rank:04d}_{stem}_wrapped.obj'
@@ -443,7 +448,7 @@ class BatchManager:
                         try:
                             if item.get('textureError'):raise ValueError(item['textureError'])
                             texture={'name':item.get('textureName','scan.png'),'dataUrl':item['textureHeader']+','+base64.b64encode((path/'inputs'/f'{item["id"]}.texture').read_bytes()).decode()}
-                            refined=refine_texture({'source':source,'target':target,'vertices':result['vertices'],'pairs':constraints['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'target':constraints['excludedTargetFaces']},'brushWeights':flow['brushWeights'],'sourceTexture':reference_texture,'targetTexture':texture,'cameraWorld':flow['cameraWorld'],'normalAngle':settings['normalAngle'],'settings':flow['settings']})
+                            refined=refine_texture({'source':source,'target':target,'vertices':result['vertices'],'pairs':constraints['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'sourceMode':config.get('sourceRegionMode','fixed'),'target':constraints['excludedTargetFaces']},'brushWeights':flow['brushWeights'],'sourceTexture':reference_texture,'targetTexture':texture,'cameraWorld':flow['cameraWorld'],'normalAngle':settings['normalAngle'],'settings':flow['settings']})
                             refined_text=export_obj(source,refined['vertices']);refined_size=len(refined_text.encode('utf-8'))
                             if job['outputBytes']-size+refined_size>MAX_BYTES:limited=True;raise ValueError('光流细化输出超过 256 MB 上限，请拆分批次。')
                             temporary=path/(relative+'.tmp');temporary.write_text(refined_text,encoding='utf-8',newline='');temporary.replace(path/relative)
@@ -466,7 +471,7 @@ class BatchManager:
                         with self.lock:item.update(status='running',stage='temporal',temporalStatus='running');self._save(job)
                         try:
                             ts=config['temporal'];motion_candidate=np.asarray(result['vertices'],dtype=float)
-                            smoothed=smooth_frame({'source':source,'target':target,'vertices':result['vertices'],'pairs':constraints['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'target':constraints['excludedTargetFaces']},'normalAngle':settings['normalAngle'],'settings':ts,'brushWeights':ts['brushWeights'],'motionPrevious':previous_motion.tolist() if previous_motion is not None and ts.get('adaptive') else None},previous)
+                            smoothed=smooth_frame({'source':source,'target':target,'vertices':result['vertices'],'pairs':constraints['pairs'],'excludedFaces':{'source':config['excludedSourceFaces'],'sourceMode':config.get('sourceRegionMode','fixed'),'target':constraints['excludedTargetFaces']},'normalAngle':settings['normalAngle'],'settings':ts,'brushWeights':ts['brushWeights'],'motionPrevious':previous_motion.tolist() if previous_motion is not None and ts.get('adaptive') else None},previous)
                             smooth_text=export_obj(source,smoothed['vertices']);smooth_size=len(smooth_text.encode('utf-8'))
                             if job['outputBytes']-size+smooth_size>MAX_BYTES:limited=True;raise ValueError('时序平滑输出超过 256 MB 上限，请拆分批次。')
                             temporary=path/(relative+'.tmp');temporary.write_text(smooth_text,encoding='utf-8',newline='');temporary.replace(path/relative)

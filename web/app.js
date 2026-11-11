@@ -12,7 +12,7 @@ import {pointPosition,pointSupport,samePoint,pointLabel,pointFromHit,pairKey} fr
 initializeLanguage();
 const $ = id => document.getElementById(id);
 const state = { source: null, target: null, pairs: [], pending: null, result: null, busy: false,
-  edit: null, excludedFaces: {source:new Set(),target:new Set()}, regionUndo: [], dirty:false,
+  edit: null, excludedFaces: {source:new Set(),target:new Set()}, sourceRegionMode: 'fixed', regionUndo: [], dirty:false,
   autoSuggestion:null, autoMessage:'尚未自动检测',brushWeights:null,curves:[],curvePairs:[],curvePaths:null,curveSuggestion:null,curveIndex:0,flowSuggestion:null,flowUi:null };
 const views = {};
 const brush={context:null,surface:null,history:new StrokeHistory(),stroke:null,pointer:null,lastTime:0,cursor:null};
@@ -100,7 +100,7 @@ function updateWeightColors(ids=null){
   const mesh=views.source?.mesh;if(!mesh||!state.brushWeights||!$('show-weights').checked||state.flowSuggestion)return;
   const g=mesh.geometry;let color=g.attributes.color;
   if(!color){color=new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count*3),3);g.setAttribute('color',color);ids=null;}
-  const locked=brush.context?.locked||new Set([...blockedVertices('source'),...state.pairs.flatMap(p=>pointSupport(state.source.faces,p[0]))]);
+  const locked=brush.context?.locked||new Set([...(state.sourceRegionMode==='fixed'?blockedVertices('source'):[]),...state.pairs.flatMap(p=>pointSupport(state.source.faces,p[0]))]);
   const paint=(id,index)=>{const w=state.brushWeights[id];color.setXYZ(index,...(locked.has(id)?[.7,.035,.09]:[.07+.88*w,.32+.34*w,.95-.73*w]));};
   if(g.index){for(const id of ids||state.brushWeights.keys())paint(id,id);}
   else if(ids&&brush.context){for(const id of ids)for(const corner of brush.context.corners[id])paint(id,corner);}
@@ -117,7 +117,7 @@ function refreshExclusions(side) {
   if(!state[side]||!state.excludedFaces[side].size||side==='source'&&qualityUI?.enabled)return;
   const vertices=side==='source'&&state.result?state.result.vertices:state[side].vertices;
   const faces=[...state.excludedFaces[side]].map(i=>state[side].faces[i]);
-  const mesh=new THREE.Mesh(geometry(vertices,faces),new THREE.MeshBasicMaterial({color:0xf0655b,transparent:true,opacity:.75,side:THREE.DoubleSide,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
+  const mesh=new THREE.Mesh(geometry(vertices,faces),new THREE.MeshBasicMaterial({color:side==='source'&&state.sourceRegionMode==='follow'?0x4ebdcc:0xf0655b,transparent:true,opacity:.75,side:THREE.DoubleSide,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
   v.group.add(mesh);v.exclusions=mesh;
 }
 function regionPatch(side,index) {
@@ -130,7 +130,7 @@ function regionPatch(side,index) {
 }
 function selectRegion(side,index) {
   if(state.result){status('请先恢复原始模板，再修改排除区域。',true);return;}
-  const patch=regionPatch(side,index),exclude=$('tool').value==='exclude',current=state.excludedFaces[side];
+  const data=state[side],patch=regionPatch(side,index),exclude=$('tool').value==='exclude',current=state.excludedFaces[side];
   if(exclude){
     const protectedIds=new Set(state.pairs.flatMap(p=>pointSupport(data.faces,p[side==='source'?0:1])));
     for(const curve of state.curves)for(const point of curve[side])for(const id of pointSupport(data.faces,point))protectedIds.add(id);
@@ -202,6 +202,7 @@ function update() {
   setText($('project-state'),!state.source&&!state.target?'未建立工程':state.dirty?'有未保存更改':'已保存');
   $('cancel-edit').hidden=state.edit===null;
   setText($('region-count'),`模板 ${state.excludedFaces.source.size} 面 · 目标 ${state.excludedFaces.target.size} 面`);
+  $('source-region-mode').value=state.sourceRegionMode;$('source-region-mode').disabled=state.busy;
   $('undo-region').disabled=state.busy||!state.regionUndo.length;
   $('clear-regions').disabled=state.busy||(!state.excludedFaces.source.size&&!state.excludedFaces.target.size);
   setText($('phase'),brush.stroke?'正在笔刷修正':state.busy?'正在处理':state.result?.textureRefined?'纹理细化结果':state.result?.manualEdits?'手动修正结果':state.result?'贴合完成':state.edit?'重选对应点':$('tool').value==='curves'?'绘制成对曲线':$('tool').value!=='points'?'编辑排除区域':ready?'选择对应点':'准备模型');
@@ -368,8 +369,18 @@ $('clear').onclick=()=>{clearResult();state.pairs=[];state.pending=null;state.ed
 $('reset').onclick=()=>{clearResult();changed();status('已恢复原始模板，保留对应点与排除区域。');update();};
 $('cancel-edit').onclick=()=>{state.edit=null;status('已取消重选，原点对未改变。');update();};
 $('tool').onchange=()=>{state.edit=null;update();};
+$('source-region-mode').onchange=()=>{
+  const mode=$('source-region-mode').value;
+  state.regionUndo.push({kind:'mode',mode:state.sourceRegionMode});clearResult();state.sourceRegionMode=mode;
+  changed();refreshExclusions('source');status('已切换模板排除区行为，请重新贴合。');update();
+};
 $('undo-region').onclick=()=>{
-  const action=state.regionUndo.at(-1),set=state.excludedFaces[action.side];
+  const action=state.regionUndo.at(-1);
+  if(action.kind==='mode'){
+    clearResult();state.regionUndo.pop();state.sourceRegionMode=action.mode;$('source-region-mode').value=action.mode;
+    changed();refreshExclusions('source');status('已撤销模板区域模式切换。');update();return;
+  }
+  const set=state.excludedFaces[action.side];
   if(!action.exclude){
     const protectedIds=new Set(state.pairs.flatMap(p=>pointSupport(state[action.side].faces,p[action.side==='source'?0:1])));if(action.side==='source'&&state.pending!==null)pointSupport(state.source.faces,state.pending).forEach(id=>protectedIds.add(id));
     for(const curve of state.curves)for(const point of curve[action.side])for(const id of pointSupport(state[action.side].faces,point))protectedIds.add(id);
@@ -395,7 +406,7 @@ $('run').onclick=async()=>{
   clearResult();changed();
   state.busy=true;update();status($('solver-mode').value==='multistage'?'正在从粗到细求解，较大模型可能需要数分钟…':'正在单阶段求解，较大模型可能需要数分钟…');
   try{
-    state.result=await api('wrap',{source:state.source.text,target:state.target.text,pairs:state.pairs,iterations:Number($('iterations').value),smoothness:Number($('smoothness').value),normalAngle:Number($('normal-angle').value),solverMode:$('solver-mode').value,excludedFaces:serializedExclusions()});changed();
+    state.result=await api('wrap',{source:state.source.text,target:state.target.text,pairs:state.pairs,iterations:Number($('iterations').value),smoothness:Number($('smoothness').value),normalAngle:Number($('normal-angle').value),solverMode:$('solver-mode').value,brushWeights:state.brushWeights?Array.from(state.brushWeights):null,excludedFaces:serializedExclusions()});changed();
     setMesh('source',state.result.vertices);fit('source');$('result-badge').hidden=false;
     const s=state.result.stats;const metrics=$('metrics');metrics.hidden=false;metrics.replaceChildren();
     for(const text of [`平均三角面距离　${s.initialMeanDistance.toPrecision(4)} → ${s.finalMeanDistance.toPrecision(4)}`,`对应点最大误差　${s.landmarkMaxError.toExponential(2)}`,`法线过滤 ${s.normalFilteredNearestVertices} 个最近匹配 · 防翻面限步 ${s.flipLimitedSteps} 次`,`${s.iterations}/${s.requestedIterations} 次迭代 · 顶点数与拓扑保留`]){const el=document.createElement('strong');setText(el,text);metrics.append(el);}
@@ -413,7 +424,7 @@ $('export').onclick=async()=>{
   state.busy=true;update();
   try{const data=await api('export',{source:state.source.text,vertices:state.result.vertices});download(data.text,state.source.name.replace(/\.obj$/i,'')+'_wrapped.obj','text/plain');status('已导出 OBJ，保留原始面和 UV。');}catch(error){status(error.message,true);}finally{state.busy=false;update();}
 };
-function serializedExclusions(){return {source:[...state.excludedFaces.source],target:[...state.excludedFaces.target]};}
+function serializedExclusions(){return {sourceMode:state.sourceRegionMode,source:[...state.excludedFaces.source],target:[...state.excludedFaces.target]};}
 function brushActive(){return Boolean(state.result&&brush.context&&!state.flowSuggestion&&!qualityUI?.inspecting&&$('brush-tool').value!=='navigate');}
 function weightTool(){return ['weight-paint','weight-smooth'].includes($('brush-tool').value);}
 function brushSettings(){const radiusPercent=Number($('brush-radius').value),strength=Number($('brush-strength').value);if(!Number.isFinite(radiusPercent)||radiusPercent<.2||radiusPercent>20||!Number.isFinite(strength)||strength<1||strength>100)throw Error('笔刷半径为 0.2%–20%，强度为 1–100。');return {radiusPercent,strength};}
@@ -533,7 +544,7 @@ $('brush-tool').onchange=async()=>{
   if(!state.result){$('brush-tool').value='navigate';return;}
   if(!brush.context){
     state.busy=true;update();status('正在准备笔刷约束…');
-    try{const data=await api('brush-reference',{source:state.source.text,target:state.target.text,pairs:state.pairs,vertices:state.result.vertices,excludedFaces:serializedExclusions()});brush.context=new BrushMesh(state.result.vertices,state.source.faces,data.reference,data.locked,data.unit,state.brushWeights);state.brushWeights=brush.context.weights;setText($('brush-info'),'笔刷就绪：在左侧按住左键修正。');status('笔刷就绪。');}
+    try{const data=await api('brush-reference',{source:state.source.text,target:state.target.text,pairs:state.pairs,vertices:state.result.vertices,excludedFaces:serializedExclusions()});brush.context=new BrushMesh(state.result.vertices,state.source.faces,data.reference,data.locked,data.unit,state.brushWeights,state.sourceRegionMode==='follow'?[...blockedVertices('source')]:[]);state.brushWeights=brush.context.weights;setText($('brush-info'),'笔刷就绪：在左侧按住左键修正。');status('笔刷就绪。');}
     catch(error){$('brush-tool').value='navigate';status(error.message,true);}
     finally{state.busy=false;update();}
   }else update();
@@ -612,7 +623,7 @@ $('export-textured-model').onclick=async()=>{
   }catch(error){status(error.message,true);}finally{state.busy=false;update();}
 };
 function projectData(){
-  return {format:'facewrap-lite',version:state.pairs.some(p=>p.some(x=>!Number.isInteger(x)))||state.pending!==null&&!Number.isInteger(state.pending)||state.curves.some(c=>c.type==='spline')?2:1,curves:state.curves,curvePairs:currentCurvePairs(),brushWeights:state.brushWeights?Array.from(state.brushWeights):null,models:Object.fromEntries(['source','target'].map(side=>[side,state[side]?{name:state[side].name,text:state[side].text,texture:state[side].texture}:null])),
+  return {format:'facewrap-lite',version:state.sourceRegionMode==='follow'||state.brushWeights?3:state.pairs.some(p=>p.some(x=>!Number.isInteger(x)))||state.pending!==null&&!Number.isInteger(state.pending)||state.curves.some(c=>c.type==='spline')?2:1,curves:state.curves,curvePairs:currentCurvePairs(),brushWeights:state.brushWeights?Array.from(state.brushWeights):null,models:Object.fromEntries(['source','target'].map(side=>[side,state[side]?{name:state[side].name,text:state[side].text,texture:state[side].texture}:null])),
     pairs:state.pairs,pending:state.pending,excludedFaces:serializedExclusions(),settings:{iterations:Number($('iterations').value),smoothness:Number($('smoothness').value),normalAngle:Number($('normal-angle').value),solverMode:$('solver-mode').value,bake:bakeSettings(),brush:brushSettings(),flow:flowSettings()},result:state.result?{vertices:state.result.vertices,texture:state.result.texture,manualEdits:Boolean(state.result.manualEdits),textureRefined:Boolean(state.result.textureRefined)}:null};
 }
 $('save-project').onclick=async()=>{
@@ -629,6 +640,7 @@ $('project-file').onchange=async e=>{
     let input;try{input=JSON.parse(await file.text());}catch{throw new Error('工程文件不是有效的 JSON。');}
     const project=await api('project',input);health.undo=null;
     clearResult();state.autoSuggestion=null;state.autoMessage='尚未自动检测';state.source=project.models.source;state.target=project.models.target;state.brushWeights=project.brushWeights?Float64Array.from(project.brushWeights):null;state.pairs=project.pairs;state.pending=project.pending;state.edit=null;state.regionUndo=[];
+    state.sourceRegionMode=project.excludedFaces.sourceMode||'fixed';$('source-region-mode').value=state.sourceRegionMode;
     state.excludedFaces={source:new Set(project.excludedFaces.source),target:new Set(project.excludedFaces.target)};state.result=project.result;
     state.curves=project.curves;state.curvePairs=project.curvePairs;state.curveIndex=0;state.curvePaths=null;
     if(state.curves.length){try{state.curvePaths=(await api('curve-pairs',curveRequest(true))).paths;}catch(error){setText($('curve-info'),`曲线已恢复，路径需检查：${error.message}`);}}
@@ -729,7 +741,7 @@ $('health-preview').onclick=async()=>{
 };
 $('health-original').onclick=()=>showHealthReport(!health.after);
 $('health-download').onclick=()=>download(health.repair.text,health.name.replace(/\.obj$/i,'')+'_repaired.obj','text/plain');
-const repairStateKeys=['source','target','pairs','pending','result','edit','excludedFaces','regionUndo','dirty','autoSuggestion','autoMessage','brushWeights','curves','curvePairs','curvePaths','curveIndex'];
+const repairStateKeys=['source','target','pairs','pending','result','edit','excludedFaces','sourceRegionMode','regionUndo','dirty','autoSuggestion','autoMessage','brushWeights','curves','curvePairs','curvePaths','curveIndex'];
 function rebuildModelsAfterRepair(){
   for(const side of ['source','target']){
     const m=state[side];
@@ -801,7 +813,7 @@ try{views.source=setupView('source',0xa8afb9);views.target=setupView('target',0x
       if(useCurrent){const exported=await api('export',{source:state.source.text,vertices:state.result.vertices});source.text=exported.text;source.name=source.name.replace(/\.obj$/i,'')+'_current.obj';}
       let flowSnapshot=null;
       if(flow){if(!state.source.hasUV||!state.source.texture)throw Error('批量光流需要模板完整 UV 和原始参考贴图。');views.source.controls.update();views.source.camera.updateMatrixWorld(true);flowSnapshot={settings:flowSettings(),cameraWorld:views.source.camera.matrixWorld.toArray(),brushWeights:state.brushWeights?Array.from(state.brushWeights):null,sourceTexture:{...state.source.texture}};}
-      return {source,temporal:temporal?{...temporal,brushWeights:state.brushWeights?Array.from(state.brushWeights):null}:null,flow:flowSnapshot,bake:bake?bakeSettings():null,useCurrentResult:useCurrent,referenceTarget:state.target?.text,pairs:state.pairs.map(p=>[...p]),excludedSourceFaces:[...state.excludedFaces.source],excludedTargetFaces:[...state.excludedFaces.target],settings:{iterations:Number($('iterations').value),smoothness:Number($('smoothness').value),normalAngle:Number($('normal-angle').value),solverMode:$('solver-mode').value}};
+      return {source,temporal:temporal?{...temporal,brushWeights:state.brushWeights?Array.from(state.brushWeights):null}:null,flow:flowSnapshot,bake:bake?bakeSettings():null,useCurrentResult:useCurrent,referenceTarget:state.target?.text,pairs:state.pairs.map(p=>[...p]),sourceRegionMode:state.sourceRegionMode,brushWeights:state.brushWeights?Array.from(state.brushWeights):null,excludedSourceFaces:[...state.excludedFaces.source],excludedTargetFaces:[...state.excludedFaces.target],settings:{iterations:Number($('iterations').value),smoothness:Number($('smoothness').value),normalAngle:Number($('normal-angle').value),solverMode:$('solver-mode').value}};
     }});update();batchUI.resume();
   function animate(time=performance.now()){requestAnimationFrame(animate);processBrushFrame(time);for(const v of Object.values(views)){v.controls.update();v.renderer.render(v.scene,v.camera);v.labels.render(v.scene,v.camera);}if($('health-dialog').open)health.viewer?.render();}animate();
 }catch(error){status(`三维视图初始化失败：${error.message}`,true);}

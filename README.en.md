@@ -13,7 +13,7 @@ A local 3D mesh fitting tool that wraps a template onto a scan while preserving 
 | Mesh fitting | Single-stage or coarse-to-fine solving, exact triangle-surface distances, normal filtering, and local triangle flip prevention |
 | Fit quality inspection | Error heatmap, adjustable threshold, global/local mean, RMS, P95, maximum error, and normal issue counts |
 | Points and curves | Continuous surface or vertex pairs with editing; frontal face landmark suggestions; arc-length sampling of cubic surface splines |
-| Region protection | Fixed template regions, excluded target regions, soft masks, and vertex influence painting |
+| Region protection | Fixed or following template regions, excluded target regions, and painted soft weights used in geometry fitting |
 | Brush corrections | Push, pull, smooth, project onto the scan, and smooth along its surface, with brush undo and redo |
 | Textures | Preview textures, bake scan colors into template UVs, and export PNGs or textured mesh ZIPs |
 | Texture-assisted fitting | Use optical flow to refine correspondences between expressions of the same person |
@@ -21,6 +21,8 @@ A local 3D mesh fitting tool that wraps a template onto a scan while preserving 
 | Batches and sequences | Automated fitting, optical flow refinement, baking, and export; forward, bidirectional, and adaptive temporal smoothing; anomaly detection and interpolation-based frame repair |
 | Project files | Save meshes, textures, constraints, settings, and the current result, then reopen them to continue editing |
 | Interface language | Switch instantly between Chinese and English; your choice is remembered in the current browser |
+
+Template regions can stay fixed after alignment or follow surrounding deformation without surface attraction. Paint weights after an initial fit and solve again: 0% preserves the aligned template position; positive weights scale surface attraction. Hard point constraints take priority. Region mode and weights are preserved in projects and batch snapshots.
 
 For detailed controls and limitations, see the [user guide (Chinese)](docs/user-guide.md).
 

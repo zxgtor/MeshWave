@@ -33,9 +33,9 @@ def prepare_brush(body):
     guard=FlipGuard((reference-center)/unit,faces)
     if guard.minimum_ratio((vertices-center)/unit)<.01-1e-9:
         raise ValueError('当前结果未通过防翻面检查，请重新贴合后再使用笔刷。')
-    locked=np.r_[left,masks['source'][1]]
+    locked=np.r_[left,masks['fixedSource']]
     error=positions(vertices,faces,[p[0] for p in pairs])-target_points
-    fixed_error=vertices[masks['source'][1]]-reference[masks['source'][1]]
+    fixed_error=vertices[masks['fixedSource']]-reference[masks['fixedSource']]
     if np.any(np.linalg.norm(error,axis=1)>unit*1e-7) or np.any(np.linalg.norm(fixed_error,axis=1)>unit*1e-7):
         raise ValueError('当前结果的对应点或固定区已偏离约束，请重新贴合。')
     return {'reference':reference.tolist(),'locked':locked.tolist(),'unit':unit}

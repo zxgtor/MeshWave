@@ -130,3 +130,16 @@ test('BVH queries match exhaustive triangle queries across branches and transfor
     }
   }
 });
+
+
+test('following regions skip projection but retain smooth deformation and undo',()=>{
+  const {v,f}=grid(21,(x,y)=>.04*Math.exp(-((x-.5)**2+(y-.5)**2)/.004));
+  const surface=new TargetSurface(grid().v,f),follow=[220];
+  const c=new BrushMesh(v,f,v,[],1,null,follow);
+  const before=c.vertex(220);apply(c,'project',{center:before,surface});
+  assert.deepEqual(c.vertex(220),before);
+  const history=new StrokeHistory(),all=new Map([...Array(c.n).keys()].map(i=>[i,c.vertex(i)]));
+  const changed=apply(c,'smooth-project',{center:before,surface});
+  assert.ok(changed.ids.includes(220));assert.ok(c.vertex(220)[2]<before[2]);
+  history.record(c,all);history.apply(c,'undo');assert.deepEqual(c.vertex(220),before);
+});

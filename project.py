@@ -9,8 +9,8 @@ from point_constraints import validate_pairs,handle_shape,point_key,support
 
 
 def validate_project(project):
-    if not isinstance(project, dict) or project.get('format') != 'facewrap-lite' or type(project.get('version')) is not int or project['version'] not in (1,2):
-        raise ValueError('不是支持的 Mesh Wave 工程文件（版本 1 或 2）。')
+    if not isinstance(project, dict) or project.get('format') != 'facewrap-lite' or type(project.get('version')) is not int or project['version'] not in (1,2,3):
+        raise ValueError('不是支持的 Mesh Wave 工程文件（版本 1、2 或 3）。')
     models = project.get('models')
     if not isinstance(models, dict):
         raise ValueError('工程缺少模型信息。')
@@ -48,7 +48,9 @@ def validate_project(project):
     excluded = project.get('excludedFaces', {})
     if not isinstance(excluded, dict):
         raise ValueError('工程排除区域格式无效。')
-    normalized_excluded = {}
+    mode=excluded.get('sourceMode','fixed')
+    if mode not in ('fixed','follow'):raise ValueError('模板区域模式无效。')
+    normalized_excluded = {'sourceMode':mode} if 'sourceMode' in excluded else {}
     for side in ['source', 'target']:
         normalized_excluded[side] = index_list(excluded.get(side, []), len(meshes[side][1]), '排除面').tolist()
     # A missing target is valid for an unfinished project.

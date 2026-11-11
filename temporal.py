@@ -73,6 +73,9 @@ def smooth_frame(body,previous=None,following=None):
         angle=body.get('normalAngle',60)
         if type(angle) not in (int,float) or not np.isfinite(angle) or not 10<=angle<=89:raise ValueError('法线夹角必须为 10–89 度。')
         masks=exclusion_masks(faces,tf,body.get('excludedFaces',{}),body['pairs'])
+        following=np.intersect1d(moving,masks['source'][1]) if body.get('excludedFaces',{}).get('sourceMode')=='follow' else np.array([],dtype=int)
+        proposal[following]=current[following]+delta[following]*weights[following,None]
+        moving=np.setdiff1d(moving,following)
         allowed=np.delete(np.arange(len(tf)),masks['target'][0]);surface=TriangleSurface((target-center)/unit,tf[allowed])
         q,d,_=surface.query((current[moving]+delta[moving]-center)/unit,vertex_normals(current,faces)[moving],np.cos(np.deg2rad(angle)))
         q=q*unit+center;valid=np.isfinite(d)&(d*unit<=limit)&(np.linalg.norm(q-current[moving],axis=1)<=limit+unit*1e-12)
