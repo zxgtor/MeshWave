@@ -12,6 +12,20 @@ TERMINAL = {'completed', 'failed', 'cancelled', 'interrupted'}
 MAX_QUEUED = 8
 
 
+def read_json(path):
+    # Atomic replacement can briefly deny reads on Windows. Retry opening the
+    # file, but never hide missing files, invalid JSON, or persistent denial.
+    for attempt in range(100):
+        try:
+            text = path.read_text(encoding='utf-8')
+        except PermissionError:
+            if attempt == 99:
+                raise
+            time.sleep(.01)
+        else:
+            return json.loads(text)
+
+
 def write_json(path, value):
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(value, ensure_ascii=False, allow_nan=False), encoding='utf-8')
@@ -43,7 +57,7 @@ class TaskManager:
         self.thread = None
         if self.root.exists():
             for path in self.root.glob('*/task.json'):
-                job = json.loads(path.read_text(encoding='utf-8'))
+                job = read_json(path)
                 if job['status'] not in TERMINAL:
                     job.update(status='interrupted', updated=time.time(), error='Service restarted; submit a new task.')
                     write_json(path, job)
@@ -99,7 +113,7 @@ class TaskManager:
             job = dict(self.jobs[task_id])
             progress = path / 'progress.json'
             if progress.exists():
-                job['progress'] = json.loads(progress.read_text(encoding='utf-8'))
+                job['progress'] = read_json(progress)
             job['previewAvailable'] = (path / 'preview.json').exists()
             job['resultAvailable'] = job['status'] == 'completed'
             job['viewerUrl'] = '/?task=' + task_id
@@ -119,7 +133,7 @@ class TaskManager:
             file = path / (artifact + '.json')
             if not file.exists():
                 raise ValueError('Artifact is not available yet.')
-            return json.loads(file.read_text(encoding='utf-8'))
+            return read_json(file)
 
     def cancel(self, task_id):
         with self.lock:
@@ -170,7 +184,7 @@ class TaskManager:
                     else:
                         job['status'] = 'failed'
                         error = path / 'error.json'
-                        job['error'] = json.loads(error.read_text(encoding='utf-8'))['error'] if error.exists() else 'Solver process failed; see worker.log.'
+                        job['error'] = read_json(error)['error'] if error.exists() else 'Solver process failed; see worker.log.'
                     self._save(job)
             except Exception as exc:
                 if process and process.poll() is None:

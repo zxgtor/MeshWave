@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -10,7 +11,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 import numpy as np
 import server
-from task_service import TaskManager, TERMINAL
+from task_service import TaskManager, TERMINAL, read_json
 from test_core import fixture
 from wrap_core import wrap
 
@@ -85,6 +86,27 @@ class TaskTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.manager.read(invalid, 'input')
 
+    def test_progress_poll_recovers_from_temporary_read_lock(self):
+        self.solver.acquire()
+        try:
+            job = self.manager.submit(self.body)
+            progress = Path(self.tmp.name) / job['id'] / 'progress.json'
+            progress.write_text(json.dumps({'iteration': 2}), encoding='utf-8')
+            real_read = Path.read_text
+            attempts = []
+            def locked_read(path, *args, **kwargs):
+                if path == progress:
+                    attempts.append(path)
+                    if len(attempts) <= 2:
+                        raise PermissionError(13, 'File temporarily locked', str(path))
+                return real_read(path, *args, **kwargs)
+            with patch.object(Path, 'read_text', new=locked_read):
+                self.assertEqual(self.manager.status(job['id'])['progress']['iteration'], 2)
+                self.assertEqual(self.manager.list()[0]['progress']['iteration'], 2)
+            self.assertEqual(len(attempts), 4)
+        finally:
+            self.solver.release()
+
     def test_callbacks_do_not_change_either_solver(self):
         for weights in (None, [1.] * len(self.target)):
             events = []
@@ -125,6 +147,56 @@ class TaskTests(unittest.TestCase):
             http.shutdown()
             http.server_close()
             thread.join(5)
+
+
+class JsonReadTests(unittest.TestCase):
+    def test_permanent_permission_error_has_bounded_retries(self):
+        with patch.object(Path, 'read_text', side_effect=PermissionError(13, 'Denied')) as read, \
+                patch('task_service.time.sleep') as sleep:
+            with self.assertRaises(PermissionError):
+                read_json(Path('progress.json'))
+            self.assertEqual(read.call_count, 100)
+            self.assertEqual(sleep.call_count, 99)
+            sleep.assert_called_with(.01)
+
+    def test_missing_or_corrupt_file_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as folder, patch('task_service.time.sleep') as sleep:
+            path = Path(folder) / 'progress.json'
+            with self.assertRaises(FileNotFoundError):
+                read_json(path)
+            path.write_text('{', encoding='utf-8')
+            with self.assertRaises(json.JSONDecodeError):
+                read_json(path)
+            sleep.assert_not_called()
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows sharing semantics')
+    def test_real_windows_exclusive_handle_is_retried(self):
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                      wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+        kernel.CreateFileW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.restype = wintypes.BOOL
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'progress.json'
+            path.write_text('{"iteration": 3}', encoding='utf-8')
+            handle = kernel.CreateFileW(str(path), 0x80000000, 0, None, 3, 0x80, None)
+            if handle == ctypes.c_void_p(-1).value:
+                raise ctypes.WinError(ctypes.get_last_error())
+            closed = False
+            def release(_):
+                nonlocal closed
+                self.assertTrue(kernel.CloseHandle(handle))
+                closed = True
+            try:
+                with patch('task_service.time.sleep', side_effect=release) as sleep:
+                    self.assertEqual(read_json(path), {'iteration': 3})
+                    sleep.assert_called_once_with(.01)
+            finally:
+                if not closed:
+                    kernel.CloseHandle(handle)
 
 
 if __name__ == '__main__':
